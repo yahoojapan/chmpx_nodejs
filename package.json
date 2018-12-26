@@ -1,0 +1,63 @@
+{
+  "name": "chmpx",
+  "version": "1.0.6",
+  "description": "CHMPX addon library for Node.js",
+  "os": "linux",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "bindings": "^1.3.1",
+    "nan": "^2.12.1"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "mocha": "^5.2.0",
+    "publish-please": "^5.4.3"
+  },
+  "scripts": {
+    "build": "npm run build:before && npm run build:configure && npm run build:rebuild && npm run build:linkdir && npm run build:after",
+    "build:before": "echo \"Build - Start\"",
+    "build:configure": "if [ -f src/binding.gyp ]; then cd src; fi && node-gyp configure --verbose --release --target_arch=x64 --coverage=true",
+    "build:rebuild": "if [ -f src/binding.gyp ]; then cd src; fi && node-gyp rebuild --verbose --release --target_arch=x64 --coverage=true",
+    "build:linkdir": "if [ ! -f build -a ! -s build ]; then ln -s src/build .; fi",
+    "build:after": "echo \"Build - Succeed\"",
+    "install": "npm run build",
+    "test": "npm run test:all",
+    "test:all": "npm run test:chmpx",
+    "test:chmpx": "echo \"Test - All\" && if [ -d test_* ]; then TEST_DIR=`ls -1 | grep test_ | head -1`; else TEST_DIR=test; fi; ${TEST_DIR}/run_test.sh && echo \"Finished\"",
+    "test:chmpx:slave": "echo \"Test - chmpx slave\" && if [ -d test_* ]; then TEST_DIR=`ls -1 | grep test_ | head -1`; else TEST_DIR=test; fi; ${TEST_DIR}/run_test.sh chmpx_slave && echo \"Finished\"",
+    "test:chmpx:server": "echo \"Test - chmpx server\" && if [ -d test_* ]; then TEST_DIR=`ls -1 | grep test_ | head -1`; else TEST_DIR=test; fi; ${TEST_DIR}/run_test.sh chmpx_server && echo \"Finished\"",
+    "publish-please": "publish-please",
+    "prepublishOnly": "publish-please guard"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:yahoojapan/chmpx_nodejs.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "antpickax",
+    "chmpx",
+    "messaging",
+    "message-communication",
+    "server-client-communication",
+    "cluster",
+    "consistent",
+    "inprocess-data-exchange",
+    "autoscaling",
+    "multiplex"
+  ],
+  "bugs": {
+    "url": "http://github.com/yahoojapan/chmpx_nodejs/issues",
+    "email": "antpickax-support@mail.yahoo.co.jp"
+  },
+  "author": "Takeshi Nakatani <ggtakec@gmail.com> (https://github.com/ggtakec)",
+  "contributors": [
+    "Hirotaka Wakabayashi <hiwakaba@yahoo-corp.jp> (https://github.com/hiwakaba)"
+  ],
+  "license": "MIT"
+}
