@@ -27,10 +27,10 @@ $ npm install chmpx
 ```
 
 ### Documents
-  - [Document top page(OSS)](https://nodejs.chmpx.antpick.ax/)
-  - [Github wiki page(OSS)](https://github.com/yahoojapan/chmpx_nodejs/wiki)
-  - [About K2HASH(OSS)](https://chmpx.antpick.ax/)
-  - [About AntPickax(OSS)](https://antpick.ax/)
+  - [Document top page](https://nodejs.chmpx.antpick.ax/)
+  - [Github wiki page](https://github.com/yahoojapan/chmpx_nodejs/wiki)
+  - [About CHMPX](https://chmpx.antpick.ax/)
+  - [About AntPickax](https://antpick.ax/)
 
 ### Packages
   - [NPM packages](https://www.npmjs.com/package/chmpx)
