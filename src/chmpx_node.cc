@@ -140,7 +140,7 @@ void ChmpxNode::Init()
 	Nan::SetPrototypeMethod(tpl, "close",					Close);
 	Nan::SetPrototypeMethod(tpl, "isChmpxExit",				IsChmpxExit);
 
-	// Regist
+	// Reset
 	constructor.Reset(tpl->GetFunction()); 
 }
 
@@ -570,7 +570,7 @@ NAN_METHOD(ChmpxNode::InitializeOnServer)
 		}
 	}else if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
@@ -634,7 +634,7 @@ NAN_METHOD(ChmpxNode::InitializeOnSlave)
 		}
 	}else if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
@@ -716,7 +716,7 @@ NAN_METHOD(ChmpxNode::Send)
 			is_routing = info[2]->BooleanValue();
 			if(3 < info.Length()){
 				if(!info[3]->IsFunction()){
-					// must callback function is spacified at last pos.
+					// must callback function is specified at last pos.
 					Nan::ThrowSyntaxError("Last parameter is not callback function.");
 					return;
 				}
@@ -791,7 +791,7 @@ NAN_METHOD(ChmpxNode::Broadcast)
 	Nan::Callback*	callback	= obj->_cbs.Find(stc_emitters[EMITTER_POS_BROADCAST]);
 	if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
@@ -860,7 +860,7 @@ NAN_METHOD(ChmpxNode::Reply)
 	Nan::Callback*	callback= obj->_cbs.Find(stc_emitters[EMITTER_POS_REPLY]);
 	if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
@@ -900,7 +900,7 @@ NAN_METHOD(ChmpxNode::Reply)
  *	@li outarr[1]
  *		Type is Buffer, this is set the received data.
  *
- * @param[out] outarr			Specify Array data type buffer for recieved data.
+ * @param[out] outarr			Specify Array data type buffer for received data.
  *								outarr[0] is set ComPkt, and outarr[1] is set data.
  * @param[in] timeout_ms		Specify timeout ms for receiving.
  * @param[in] no_giveup_rejoin	Specify true for that upper limit for rejoin chmpx when
@@ -945,7 +945,7 @@ NAN_METHOD(ChmpxNode::Reply)
  *		Type is Buffer, this is set the received data.
  *
  * @param[in] msgid				Specify msgid which is received from ChmpxNode::Open()
- * @param[out] outarr			Specify Array data type buffer for recieved data.
+ * @param[out] outarr			Specify Array data type buffer for received data.
  *								outarr[0] is set ComPkt, and outarr[1] is set data.
  * @param[in] timeout_ms		Specify timeout ms for receiving.
  *
@@ -1146,7 +1146,7 @@ NAN_METHOD(ChmpxNode::Receive)
 			result = false;			// maybe timeouted
 		}
 		if(result){
-			// set recieved data to array
+			// set received data to array
 			rcvarr->Set(0, Nan::Encode(pComPkt,	sizeof(COMPKT), Nan::BINARY));
 			rcvarr->Set(1, Nan::Encode(pBody,	Length,			Nan::BUFFER));
 		}
@@ -1166,7 +1166,7 @@ NAN_METHOD(ChmpxNode::Receive)
  * )
  * @brief	Open the message handle(msgid) on slave node.
  *
- *	You can specify the flag whichever it waits for up comming chmpx process
+ *	You can specify the flag whichever it waits for up coming chmpx process
  *	after chmpx process is down.
  *	If the callback function is specified, or on callback handles for this,
  *  this method works asynchronization and calls callback function at finishing.
@@ -1193,7 +1193,7 @@ NAN_METHOD(ChmpxNode::Open)
 		}
 	}else if(1 < info.Length()){
 		if(!info[1]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
@@ -1248,7 +1248,7 @@ NAN_METHOD(ChmpxNode::Close)
 	Nan::Callback*	callback	= obj->_cbs.Find(stc_emitters[EMITTER_POS_CLOSE]);
 	if(1 < info.Length()){
 		if(!info[1]->IsFunction()){
-			// must callback function is spacified at last pos.
+			// must callback function is specified at last pos.
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}

@@ -30,7 +30,7 @@ var chmpxnode = require('chmpx');
 // Common function
 //
 // [NOTE]
-// This sleep is high load avarage, but this script is only test.
+// This sleep is high load average, but this script is only test.
 //
 function sleep(milliseconds)
 {
@@ -43,7 +43,7 @@ function sleep(milliseconds)
 }
 
 //
-// Send and Recieve
+// Send and Receive
 //
 function sendReceive(msgid, data, timeout_ms, bcast)
 {
