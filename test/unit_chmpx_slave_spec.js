@@ -64,7 +64,7 @@ afterEach(function(){									// eslint-disable-line no-undef
 });
 
 //--------------------------------------------------------------
-// Sub discribe section
+// Sub describe section
 //--------------------------------------------------------------
 describe('SUB TEST: CHMPX SLAVE', function(){			// eslint-disable-line no-undef
 	require('./unit_chmpx_slave');

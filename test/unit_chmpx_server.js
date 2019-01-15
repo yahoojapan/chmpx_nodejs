@@ -36,7 +36,7 @@ var	startSlaveNode	= subproc.startSlaveNode;				// eslint-disable-line no-unused
 var	stopProcs		= subproc.stop;							// eslint-disable-line no-unused-vars
 
 //--------------------------------------------------------------
-// Main discribe section
+// Main describe section
 //--------------------------------------------------------------
 describe('CHMPX SERVER', function(){						// eslint-disable-line no-undef
 	//
@@ -47,7 +47,7 @@ describe('CHMPX SERVER', function(){						// eslint-disable-line no-undef
 //	var	msgid2			= null;
 
 	//
-	// Before in discribe section
+	// Before in describe section
 	//
 	before(function(done){								// eslint-disable-line no-undef
 		startSlaveChmpx(this, testdir);
@@ -56,7 +56,7 @@ describe('CHMPX SERVER', function(){						// eslint-disable-line no-undef
 	});
 
 	//
-	// After in discribe section
+	// After in describe section
 	//
 	after(function(done){								// eslint-disable-line no-undef
 		stopProcs(this, testdir);
@@ -234,7 +234,7 @@ describe('CHMPX SERVER', function(){						// eslint-disable-line no-undef
 	});
 
 	//
-	// Read rest messges
+	// Read rest messages
 	//
 	it('Server test - Delete ChmpxNode object', function(done){								// eslint-disable-line no-undef
 		// get rest data if exists

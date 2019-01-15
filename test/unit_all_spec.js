@@ -64,18 +64,18 @@ afterEach(function(){									// eslint-disable-line no-undef
 });
 
 //--------------------------------------------------------------
-// Main discribe section
+// Main describe section
 //--------------------------------------------------------------
 describe('ALL TEST', function(){						// eslint-disable-line no-undef
 	//
-	// Before in discribe section
+	// Before in describe section
 	//
 	before(function(){									// eslint-disable-line no-undef
 		// Nothing to do
 	});
 
 	//
-	// After in discribe section
+	// After in describe section
 	//
 	after(function(){									// eslint-disable-line no-undef
 		// Nothing to do

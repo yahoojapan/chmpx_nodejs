@@ -37,7 +37,7 @@ func_usage()
 	echo "        TRAVIS_TAG         if the current build is for a git tag, this variable is set to the tag’s name"
 	echo "        FORCE_PUBLISH_PKG  if this env is 'true', force packaging and publishing anytime"
 	echo "        NPM_TOKEN          specify NPM token for publishing or checking package(must not be null)"
-	echo "        NODE_MAJOR_VERSION specify Node.js mejor version number(6, 8, 10, ...)"
+	echo "        NODE_MAJOR_VERSION specify Node.js major version number(6, 8, 10, ...)"
 	echo "        USE_PC_REPO        if this env is 'true', use packagecloud.io repository"
 	echo "        PUBLISHER          if this env is 'true', do publish npm package."
 	echo ""
@@ -199,7 +199,7 @@ curl -sL https://deb.nodesource.com/setup_${NODE_MAJOR_VERSION}.x | bash -
 if [ ${NODE_MAJOR_VERSION} -eq 6 ]; then
 	#
 	# Node.js 6.x needs to set following file.
-	# If not set this file, probabry install 8.x and not found npm command.
+	# If not set this file, probably install 8.x and not found npm command.
 	# See: https://github.com/nodesource/distributions/issues/761#issuecomment-443072330
 	#
 	mkdir -p /etc/apt/preferences.d
