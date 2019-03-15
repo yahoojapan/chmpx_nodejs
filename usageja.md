@@ -59,7 +59,7 @@ var chmpxnode      = require('chmpx');
 var chmpxserverobj = new chmpxnode();
 
 if(!chmpxserverobj.initializeOnServer('chmpx_server.ini', true)){
-	console.log('[ERROR] Failed to inisialize chmpx nodejs on server node, get false from initializeOnServer');
+	console.log('[ERROR] Failed to initialize chmpx nodejs on server node, get false from initializeOnServer');
 	process.exit(1);
 }
 
@@ -106,7 +106,7 @@ var chmpxnode     = require('chmpx');
 var chmpxslaveobj = new chmpxnode();
 
 if(!chmpxslaveobj.initializeOnSlave('chmpx_slave.ini', true)){
-	console.log('[ERROR] Failed to inisialize chmpx nodejs on slave node, get false from InitializeOnSlave');
+	console.log('[ERROR] Failed to initialize chmpx nodejs on slave node, get false from InitializeOnSlave');
 	process.exit(1);
 }
 
@@ -128,11 +128,11 @@ console.log('<--- %s(hex) : %s', msgid.toString('hex'), result);
 //
 // Receive reply message
 //
-var bufarr = new Array();
-result = chmpxslaveobj.receive(msgid, bufarr, 1000);
+var buffarr = new Array();
+result = chmpxslaveobj.receive(msgid, buffarr, 1000);
 
 console.log('---> Receive(%s(hex)) : %s', msgid.toString('hex'), result);
-console.log('     buf array length = ' + bufarr.length);
+console.log('     buf array length = ' + buffarr.length);
 
 //
 // Close msgid
