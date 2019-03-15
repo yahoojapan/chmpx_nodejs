@@ -15,7 +15,7 @@ next_string: Usage
 
 # Feature
 CHMPX Node.js is an addon library that implemented [CHMPX](https://chmpx.antpick.ax/) (Consistent Hashing Mq inProcess data eXchange) of communication middleware published by Yahoo! JAPAN as open source so that it can be used on server side JavaScript environment [Node.js](https://nodejs.org/).
-Developers can use the CHMPX Node.js addoon library in the same way as general JavaScript libraries and Node.js addon libraries.
+Developers can use the CHMPX Node.js addon library in the same way as general JavaScript libraries and Node.js addon libraries.
 
 ## Synchronous and Asynchronous
 CHMPX Node.js addon library provides [CHMPX](https://chmpx.antpick.ax/) functions synchronously and asynchronously with JavaScript.

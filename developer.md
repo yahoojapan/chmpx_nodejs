@@ -651,7 +651,7 @@ Function formats are different depending on synchronous and asynchronous.
   When using this method as synchronization, specify **Array** for received data.  
   When data reception is successful, `Binary compkt`(information of the transmitted CHMPX server node) is set to outarr[0], `Buffer data`(received data) is set to outarr[1].
 - timeout_ms  
-  Specify the reception timeout in **milli seconds**(ms).  
+  Specify the reception timeout in **milliseconds**(ms).  
   If you do not want to set the reception timeout, specify **0**.
 - cbfunc  
   When using this method as asynchronous, the following prototype callback function can be specified.  
@@ -770,7 +770,7 @@ Function formats are different depending on synchronous and asynchronous.
   When using this method as synchronization, specify **Array** for received data.  
   When data reception is successful, `Binary compkt`(information of the transmitted CHMPX server node) is set to outarr[0], `Buffer data`(received data) is set to outarr[1].
 - timeout_ms  
-  Specify the reception timeout in **milli seconds**(ms).  
+  Specify the reception timeout in **milliseconds**(ms).  
   If you do not want to set the reception timeout, specify **0**.
 - no_giveup_rejoin  
   If you specify true, it blocks until the CHMPX server node process starts.  
