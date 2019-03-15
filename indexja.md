@@ -16,7 +16,9 @@ arrow_link_environments: <a href="environmentsja.html" class="link-title"><span 
 # **CHMPX Node.js**
 **CHMPX Node.js**（addon library for Node.js）は、いくつかの特徴を備えた独自の通信ミドルウエア **CHMPX**（Consistent Hashing Mq inProcess data eXchange）のNode.jsアドオンライブラリです。  
 **CHMPX Node.js** を利用して、**CHMPX**ライブラリが提供するすべての機能をサーバーサイドJavaScript環境の [Node.js](https://nodejs.org/ja/)で利用できます。  
-**CHMPX Node.js** は、Yahoo! JAPANがオープンソースとして公開するプロダクト [AntPickax](https://antpick.ax/indexja.html) のひとつです。
+**CHMPX Node.js** は、Yahoo! JAPANがオープンソースとして公開するプロダクト [AntPickax](https://antpick.ax/indexja.html) のひとつです。  
+
+![CHMPX Node.js addon](images/top_chmpx_nodejs.png)
 
 ## {{ page.arrow_link_overview }}
 **CHMPX Node.js** の[概要](homeja.html)について説明します。  

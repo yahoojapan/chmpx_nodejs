@@ -16,7 +16,9 @@ arrow_link_environments: <a href="environments.html" class="link-title"><span cl
 # **CHMPX Node.js**
 **CHMPX Node.js** (addon library for Node.js) a Node.js addon library which wraps **CHMPX** (Consistent Hashing Mq inProcess data eXchange) as communication middleware.
 Using **CHMPX Node.js**, all functions provided by the **CHMPX** library can be used from the server side JavaScript environment [Node.js](https://nodejs.org/).
-**CHMPX Node.js** is one of [AntPickax](https://antpick.ax/)'s open source product by Yahoo! JAPAN.
+**CHMPX Node.js** is one of [AntPickax](https://antpick.ax/)'s open source product by Yahoo! JAPAN.  
+
+![CHMPX Node.js addon](images/top_chmpx_nodejs.png)
 
 ## {{ page.arrow_link_overview }}
 [Overview](home.html) about **CHMPX Node.js** library.
