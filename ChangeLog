@@ -1,11 +1,17 @@
-chmpx_nodejs (1.0.8) unstable ; urgency=low
+chmpx (1.0.9) unstable; urgency=low
+
+  * Added chmpx nodejs addon overview image to README.md - #8
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Fri, 15 Mar 2019 12:57:30 +0900
+
+chmpx (1.0.8) unstable; urgency=low
 
   * Fixed misspelling, and etc - #5
   * Reflected the spelling check result for all sources - #4
 
  -- Takeshi Nakatani <ggtakec@gmail.com>  Thu, 27 Dec 2018 09:46:07 +0900
 
-chmpx (1.0.7) unstable ; urgency=low
+chmpx (1.0.7) unstable; urgency=low
 
   * Fixed link string for chmpx document
   * Fixed package name in ChangeLog
@@ -13,7 +19,7 @@ chmpx (1.0.7) unstable ; urgency=low
 
  -- Takeshi Nakatani <ggtakec@gmail.com>  Thu, 27 Dec 2018 09:46:07 +0900
 
-chmpx (1.0.6) unstable ; urgency=low
+chmpx (1.0.6) unstable; urgency=low
 
   * First published version
 
