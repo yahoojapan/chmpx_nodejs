@@ -15,7 +15,9 @@ CHMPX nodejs is the Node.js addon library of the CHMPX communication middleware 
 CHMPX is a product of a communication middleware library and tools for binary communication between processes over network.  
 
 By chmpx nodejs addon library, you can easily incorporate CHMPX communication function into Node.js based program.  
-For CHMPX nodejs's features and functions, refer to [chmpx documentation](https://chmpx.antpick.ax/).
+For CHMPX nodejs's features and functions, refer to [chmpx documentation](https://chmpx.antpick.ax/).  
+
+![CHMPX Node.js addon](https://nodejs.chmpx.antpick.ax/images/top_chmpx_nodejs.png)
 
 ### Usage
 chmpx nodejs addon library is provided as an NPM package.  
