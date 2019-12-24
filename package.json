@@ -1,6 +1,6 @@
 {
   "name": "chmpx",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "CHMPX addon library for Node.js",
   "os": "linux",
   "main": "index.js",
@@ -8,8 +8,8 @@
     "test": "test"
   },
   "dependencies": {
-    "bindings": "^1.3.1",
-    "nan": "^2.12.1"
+    "bindings": "^1.5.0",
+    "nan": "^2.13.1"
   },
   "devDependencies": {
     "chai": "^4.2.0",

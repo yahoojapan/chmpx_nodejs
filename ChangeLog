@@ -1,3 +1,9 @@
+chmpx (1.0.10) unstable; urgency=low
+
+  * Updated version of dependency package(chmpx)
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Tue, 24 Dec 2019 11:40:12 +0900
+
 chmpx (1.0.9) unstable; urgency=low
 
   * Added chmpx nodejs addon overview image to README.md - #8
