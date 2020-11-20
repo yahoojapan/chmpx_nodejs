@@ -1,0 +1,113 @@
+#
+# Utility helper tools for Github Actions by AntPickax
+#
+# Copyright 2020 Yahoo Japan Corporation.
+#
+# AntPickax provides utility tools for supporting nodejs.
+#
+# These tools retrieve the necessary information from the
+# repository and appropriately set the setting values of
+# configure, Makefile, spec,etc file and so on.
+# These tools were recreated to reduce the number of fixes and
+# reduce the workload of developers when there is a change in
+# the project configuration.
+# 
+# For the full copyright and license information, please view
+# the license file that was distributed with this source code.
+#
+# AUTHOR:   Takeshi Nakatani
+# CREATE:   Wed, Nov 18 2020
+# REVISION: 1.0
+#
+
+#------------------------------------------------------------------------------------
+# Github Actions
+#------------------------------------------------------------------------------------
+name: Node.js AntPickax CI
+
+#
+# Events
+#
+on:
+  push:
+  pull_request:
+  #
+  # CRON event is fire on every sunday(UTC).
+  #
+  schedule:
+    - cron: '0 15 * * 0'
+
+#
+# Jobs
+#
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      #
+      # do not stop jobs automatically if any of the jobs fail
+      #
+      fail-fast: false
+
+      matrix:
+        node-version: [8.x, 10.x, 12.x, 14.x]
+
+    steps:
+      #
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      #
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      #
+      # Run building and packaging helper
+      #
+      # [NOTE] Secrets and Environments
+      # When passing parameters to build_helper.sh in build and packaging,
+      # use Secret of organization or repository.
+      # 
+      # By setting the correct values for the following variable names,
+      # they will be passed as parameters in build_helper.sh.
+      #    NODEJS_TYPE_VARS_FILE      : specify custom variables file
+      #  * NPM_TOKEN                  : The token for publishing to npm
+      #    FORCE_PUBLISHER            : nodejs major version to publish packages
+      #    USE_PACKAGECLOUD_REPO      : true means using pacakgecloud.io repo, false is not using
+      #    PACKAGECLOUD_OWNER         : owner name as a pat of path to packagcloud.io for downloading
+      #    PACKAGECLOUD_DOWNLOAD_REPO : repo name as a pat of path to packagcloud.io for downloading
+      #
+      # [REQUIRED]
+      # NPM_TOKEN is required to publish(upload) the package!!!
+      # For yahoojapan organization repositories, always set NPM_TOKEN!!!
+      #
+      - name: Run building and packaging
+        env:
+          TMP_CI_NODEJS_TYPE_VARS_FILE:      ${{ secrets.NODEJS_TYPE_VARS_FILE }}
+          TMP_CI_NPM_TOKEN:                  ${{ secrets.NPM_TOKEN }}
+          TMP_CI_FORCE_PUBLISHER:            ${{ secrets.FORCE_PUBLISHER }}
+          TMP_CI_USE_PACKAGECLOUD_REPO:      ${{ secrets.USE_PACKAGECLOUD_REPO }}
+          TMP_CI_PACKAGECLOUD_OWNER:         ${{ secrets.PACKAGECLOUD_OWNER }}
+          TMP_CI_PACKAGECLOUD_DOWNLOAD_REPO: ${{ secrets.PACKAGECLOUD_DOWNLOAD_REPO }}
+
+        run: |
+          if [ "X${TMP_CI_NODEJS_TYPE_VARS_FILE}" != "X" ]; then      OPT_CI_NODEJS_TYPE_VARS_FILE="-f ${TMP_CI_NODEJS_TYPE_VARS_FILE}";                  fi
+          if [ "X${TMP_CI_NPM_TOKEN}" != "X" ]; then                  OPT_CI_NPM_TOKEN="-token ${TMP_CI_NPM_TOKEN}";                                      fi
+          if [ "X${TMP_CI_FORCE_PUBLISHER}" != "X" ]; then            OPT_CI_FORCE_PUBLISHER="-fp ${TMP_CI_FORCE_PUBLISHER}";                             fi
+          if [ "X${TMP_CI_USE_PACKAGECLOUD_REPO}" = "Xtrue" ]; then   OPT_CI_USE_PACKAGECLOUD_REPO="-usepc";                                              elif [ "X${TMP_CI_USE_PACKAGECLOUD_REPO}" = "Xfalse" ]; then OPT_CI_USE_PACKAGECLOUD_REPO="-notpc"; fi
+          if [ "X${TMP_CI_PACKAGECLOUD_OWNER}" != "X" ]; then         OPT_CI_PACKAGECLOUD_OWNER="-pcowner ${TMP_CI_PACKAGECLOUD_OWNER}";                  fi
+          if [ "X${TMP_CI_PACKAGECLOUD_DOWNLOAD_REPO}" != "X" ]; then OPT_CI_PACKAGECLOUD_DOWNLOAD_REPO="-pcdlrepo ${TMP_CI_PACKAGECLOUD_DOWNLOAD_REPO}"; fi
+          /bin/sh -c "$GITHUB_WORKSPACE/.github/workflows/nodejs_helper.sh -node ${{ matrix.node-version }} $OPT_CI_NODEJS_TYPE_VARS_FILE $OPT_CI_NPM_TOKEN $OPT_CI_FORCE_PUBLISHER $OPT_CI_USE_PACKAGECLOUD_REPO $OPT_CI_PACKAGECLOUD_OWNER $OPT_CI_PACKAGECLOUD_DOWNLOAD_REPO"
+
+#
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: expandtab sw=4 ts=4 fdm=marker
+# vim<600: expandtab sw=4 ts=4
+#
