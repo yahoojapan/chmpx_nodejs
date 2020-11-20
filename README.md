@@ -1,6 +1,6 @@
 chmpx nodejs addon library
 ===========================
-[![Build Status](https://travis-ci.org/yahoojapan/chmpx_nodejs.svg?branch=master)](https://travis-ci.org/yahoojapan/chmpx_nodejs)
+[![Node.js AntPickax CI](https://github.com/yahoojapan/chmpx_nodejs/workflows/Node.js%20AntPickax%20CI/badge.svg)](https://github.com/yahoojapan/chmpx_nodejs/actions)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/yahoojapan/chmpx_nodejs/master/LICENSE)
 [![GitHub forks](https://img.shields.io/github/forks/yahoojapan/chmpx_nodejs.svg)](https://github.com/yahoojapan/chmpx_nodejs/network)
 [![GitHub stars](https://img.shields.io/github/stars/yahoojapan/chmpx_nodejs.svg)](https://github.com/yahoojapan/chmpx_nodejs/stargazers)
