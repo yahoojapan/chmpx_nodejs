@@ -36,7 +36,7 @@ NAN_METHOD(CreateObject)
 void InitAll(Local<Object> exports, Local<Object> module)
 {
 	ChmpxNode::Init();
-	module->Set(Nan::New("exports").ToLocalChecked(), Nan::New<FunctionTemplate>(CreateObject)->GetFunction()); 
+	Nan::Set(module, Nan::New("exports").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(CreateObject)).ToLocalChecked());
 }
 
 NODE_MODULE(chmpx, InitAll)
