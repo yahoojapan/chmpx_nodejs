@@ -9,12 +9,12 @@
   },
   "dependencies": {
     "bindings": "^1.5.0",
-    "nan": "^2.13.1"
+    "nan": "^2.14.2"
   },
   "devDependencies": {
     "chai": "^4.2.0",
-    "mocha": "^5.2.0",
-    "publish-please": "^5.4.3"
+    "mocha": "^8.2.1",
+    "publish-please": "^5.5.2"
   },
   "scripts": {
     "build": "npm run build:before && npm run build:configure && npm run build:rebuild && npm run build:linkdir && npm run build:after",

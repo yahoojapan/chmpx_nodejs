@@ -42,7 +42,11 @@
 				#
 				# For nodejs 9.x/10.x, it puts about MakeCallback / CreateDataProperty / DefineOwnProperty
 				#
-				"-Wno-deprecated-declarations"
+				"-Wno-deprecated-declarations",
+				#
+				# For nodejs 12.x/..., it suppress warnings: "'deprecated' attribute directive ignored"
+				#
+				"-Wno-attributes"
 			],
 			"include_dirs":	[
 				"<!(node -e \"require('nan')\")"

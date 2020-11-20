@@ -141,7 +141,7 @@ void ChmpxNode::Init()
 	Nan::SetPrototypeMethod(tpl, "isChmpxExit",				IsChmpxExit);
 
 	// Reset
-	constructor.Reset(tpl->GetFunction()); 
+	constructor.Reset(Nan::GetFunction(tpl).ToLocalChecked());
 }
 
 NAN_METHOD(ChmpxNode::New)
@@ -566,7 +566,7 @@ NAN_METHOD(ChmpxNode::InitializeOnServer)
 			// function
 			callback		= new Nan::Callback(info[1].As<v8::Function>());
 		}else{
-			is_auto_rejoin	= info[1]->BooleanValue();
+			is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
 		}
 	}else if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
@@ -574,7 +574,7 @@ NAN_METHOD(ChmpxNode::InitializeOnServer)
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
-		is_auto_rejoin	= info[1]->BooleanValue();
+		is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
 		callback		= new Nan::Callback(info[2].As<v8::Function>());
 	}
 
@@ -630,7 +630,7 @@ NAN_METHOD(ChmpxNode::InitializeOnSlave)
 			// function
 			callback		= new Nan::Callback(info[1].As<v8::Function>());
 		}else{
-			is_auto_rejoin	= info[1]->BooleanValue();
+			is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
 		}
 	}else if(2 < info.Length()){
 		if(!info[2]->IsFunction()){
@@ -638,7 +638,7 @@ NAN_METHOD(ChmpxNode::InitializeOnSlave)
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
-		is_auto_rejoin	= info[1]->BooleanValue();
+		is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
 		callback		= new Nan::Callback(info[2].As<v8::Function>());
 	}
 
@@ -713,7 +713,7 @@ NAN_METHOD(ChmpxNode::Send)
 		if(info[2]->IsFunction()){
 			callback = new Nan::Callback(info[2].As<v8::Function>());
 		}else{
-			is_routing = info[2]->BooleanValue();
+			is_routing = Nan::To<bool>(info[2]).ToChecked();
 			if(3 < info.Length()){
 				if(!info[3]->IsFunction()){
 					// must callback function is specified at last pos.
@@ -998,18 +998,18 @@ NAN_METHOD(ChmpxNode::Receive)
 			if(1 < info.Length()){
 				if(!info[1]->IsBoolean()){
 					// argv[1] = timeout ms
-					timeout_ms = info[1]->NumberValue();
+					timeout_ms = Nan::To<int>(info[1]).ToChecked();
 					if(2 < info.Length()){
 						// argv[2] = no giveup flag
 						if(!info[2]->IsBoolean()){
 							Nan::ThrowSyntaxError("Unknown parameter is specified for loop flag.");
 							return;
 						}
-						no_giveup_rejoin = info[2]->BooleanValue();
+						no_giveup_rejoin = Nan::To<bool>(info[2]).ToChecked();
 					}
 				}else{
 					// argv[1] = no giveup flag
-					no_giveup_rejoin = info[1]->BooleanValue();
+					no_giveup_rejoin = Nan::To<bool>(info[1]).ToChecked();
 				}
 			}
 		}else{
@@ -1019,7 +1019,7 @@ NAN_METHOD(ChmpxNode::Receive)
 			if(0 < info.Length()){
 				if(info[0]->IsBoolean()){
 					// argv[0] = no giveup flag
-					no_giveup_rejoin = info[0]->BooleanValue();
+					no_giveup_rejoin = Nan::To<bool>(info[0]).ToChecked();
 					if(1 < info.Length()){
 						// argv[1] = callback function
 						if(!info[1]->IsFunction()){
@@ -1034,11 +1034,11 @@ NAN_METHOD(ChmpxNode::Receive)
 
 				}else{
 					// argv[0] = timeout ms
-					timeout_ms = info[0]->NumberValue();
+					timeout_ms = Nan::To<int>(info[0]).ToChecked();
 					if(1 < info.Length()){
 						if(info[1]->IsBoolean()){
 							// argv[1] = no giveup flag
-							no_giveup_rejoin = info[1]->BooleanValue();
+							no_giveup_rejoin = Nan::To<bool>(info[1]).ToChecked();
 							if(2 < info.Length()){
 								if(!info[2]->IsFunction()){
 									Nan::ThrowSyntaxError("Unknown parameter is specified for callback function.");
@@ -1089,7 +1089,7 @@ NAN_METHOD(ChmpxNode::Receive)
 
 			if(2 < info.Length()){
 				// argv[2] = timeout ms
-				timeout_ms = info[2]->NumberValue();
+				timeout_ms = Nan::To<int>(info[2]).ToChecked();
 			}
 		}else{
 			// with callback
@@ -1098,7 +1098,7 @@ NAN_METHOD(ChmpxNode::Receive)
 			if(1 < info.Length()){
 				if(!info[1]->IsFunction()){
 					// argv[1] = timeout ms
-					timeout_ms = info[1]->NumberValue();
+					timeout_ms = Nan::To<int>(info[1]).ToChecked();
 					if(2 < info.Length()){
 						// argv[2] = callback function
 						if(!info[2]->IsFunction()){
@@ -1147,8 +1147,8 @@ NAN_METHOD(ChmpxNode::Receive)
 		}
 		if(result){
 			// set received data to array
-			rcvarr->Set(0, Nan::Encode(pComPkt,	sizeof(COMPKT), Nan::BINARY));
-			rcvarr->Set(1, Nan::Encode(pBody,	Length,			Nan::BUFFER));
+			Nan::Set(rcvarr, 0, Nan::Encode(pComPkt,sizeof(COMPKT), Nan::BINARY));
+			Nan::Set(rcvarr, 1, Nan::Encode(pBody,	Length,			Nan::BUFFER));
 		}
 		CHM_Free(pComPkt);
 		CHM_Free(pBody);
@@ -1189,7 +1189,7 @@ NAN_METHOD(ChmpxNode::Open)
 		if(info[0]->IsFunction()){
 			callback		= new Nan::Callback(info[0].As<v8::Function>());
 		}else{
-			no_giveup_rejoin= info[0]->BooleanValue();
+			no_giveup_rejoin= Nan::To<bool>(info[0]).ToChecked();
 		}
 	}else if(1 < info.Length()){
 		if(!info[1]->IsFunction()){
@@ -1197,7 +1197,7 @@ NAN_METHOD(ChmpxNode::Open)
 			Nan::ThrowSyntaxError("Last parameter is not callback function.");
 			return;
 		}
-		no_giveup_rejoin= info[0]->BooleanValue();
+		no_giveup_rejoin= Nan::To<bool>(info[0]).ToChecked();
 		callback		= new Nan::Callback(info[1].As<v8::Function>());
 	}
 
