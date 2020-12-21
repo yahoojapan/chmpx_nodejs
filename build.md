@@ -17,13 +17,18 @@ next_string: Developer
 The build method for CHMPX Node.js addon library is explained below.
 
 ## 1. Install prerequisites before compiling
-- Debian / Ubuntu
+- For recent Debian-based Linux distributions users, follow the steps below:
 ```
 $ sudo aptitude update
 $ sudo aptitude git gcc g++ make gdb dh-make fakeroot dpkg-dev
 $ sudo aptitude install nodejs npm
 ```
-- Fedora / CentOS
+- For users who use supported Fedora other than latest version, follow the steps below:
+```
+$ sudo dnf install git autoconf automake gcc libstdc++-devel gcc-c++ make libtool
+$ sudo dnf install nodejs npm
+```
+- For other recent RPM-based Linux distributions users, follow the steps below:
 ```
 $ sudo yum install git autoconf automake gcc libstdc++-devel gcc-c++ make libtool
 $ sudo yum install nodejs npm

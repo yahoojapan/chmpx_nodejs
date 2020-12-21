@@ -17,13 +17,18 @@ next_string: Developer
 CHMPX Node.js アドオンライブラリをビルドする方法を説明します。
 
 ## 1. 事前環境
-- Debian / Ubuntu
+- 最近のDebianベースLinuxの利用者は、以下の手順に従ってください。
 ```
 $ sudo aptitude update
 $ sudo aptitude git gcc g++ make gdb dh-make fakeroot dpkg-dev
 $ sudo aptitude install nodejs npm
 ```
-- Fedora / CentOS
+- Fedoraの利用者は、以下の手順に従ってください。
+```
+$ sudo dnf install git autoconf automake gcc libstdc++-devel gcc-c++ make libtool
+$ sudo dnf install nodejs npm
+```
+- その他最近のRPMベースのLinuxの場合は、以下の手順に従ってください。
 ```
 $ sudo yum install git autoconf automake gcc libstdc++-devel gcc-c++ make libtool
 $ sudo yum install nodejs npm
