@@ -414,6 +414,7 @@ BUILD_SRCTOP="/tmp/${TMPSRCTOP}"
 #
 # Change current directory
 #
+echo "[INFO] ${PRGNAME} : Change current directory to ${BUILD_SRCTOP}"
 run_cmd cd ${BUILD_SRCTOP}
 
 #
@@ -425,6 +426,7 @@ run_cmd npm install
 #
 # Start build
 #
+echo "[INFO] ${PRGNAME} : Run npm run build."
 run_cmd npm run build
 
 #---------------------------------------------------------------------
