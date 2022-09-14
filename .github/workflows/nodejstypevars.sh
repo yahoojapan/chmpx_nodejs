@@ -88,6 +88,18 @@ elif [ "X${NODE_MAJOR_VERSION}" = "X14" ]; then
 	INSTALL_QUIET_ARG="-qq"
 	PUBLISHER="true"
 
+elif [ "X${NODE_MAJOR_VERSION}" = "X16" ]; then
+	INSTALL_PKG_LIST="git gcc g++ make chmpx-dev"
+	INSTALLER_BIN="apt-get"
+	INSTALL_QUIET_ARG="-qq"
+	PUBLISHER="false"
+
+elif [ "X${NODE_MAJOR_VERSION}" = "X18" ]; then
+	INSTALL_PKG_LIST="git gcc g++ make chmpx-dev"
+	INSTALLER_BIN="apt-get"
+	INSTALL_QUIET_ARG="-qq"
+	PUBLISHER="false"
+
 fi
 
 #
