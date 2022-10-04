@@ -25,7 +25,9 @@
     "build:after": "echo \"Build - Succeed\"",
     "test": "npm run test:all",
     "test:all": "npm run test:chmpx",
-    "test:chmpx": "echo \"Test - All\" && test/run_test.sh && echo \"Finished\"",                                                                                                        "test:chmpx:slave": "echo \"Test - chmpx slave\" && test/run_test.sh chmpx_slave && echo \"Finished\"",                                                                              "test:chmpx:server": "echo \"Test - chmpx server\" && test/run_test.sh chmpx_server && echo \"Finished\"",
+    "test:chmpx": "echo \"Test - All\" && tests/test.sh && echo \"Finished\"",
+    "test:chmpx:slave": "echo \"Test - chmpx slave\" && tests/test.sh chmpx_slave && echo \"Finished\"",
+    "test:chmpx:server": "echo \"Test - chmpx server\" && tests/test.sh chmpx_server && echo \"Finished\"",
     "publish-please": "publish-please",
     "prepublishOnly": "publish-please guard"
   },
