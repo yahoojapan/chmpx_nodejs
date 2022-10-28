@@ -94,25 +94,12 @@ initialize_pid_file()
 ##############################################################
 # Current environment
 #
-PROGRAM_NAME=`basename $0`
-RUNDIR=`pwd`
-SELFSCRIPTDIR=`dirname $0`
-if [ "X$SELFSCRIPTDIR" = "X" -o "X$SELFSCRIPTDIR" = "X." ]; then
-	TMP_BASENAME=`basename $0`
-	TMP_FIRSTWORD=`echo $0 | awk -F"/" '{print $1}'`
-
-	if [ "X$TMP_BASENAME" = "X$TMP_FIRSTWORD" ]; then
-		# search path
-		SELFSCRIPTDIR=`which $0`
-		SELFSCRIPTDIR=`dirname $SELFSCRIPTDIR`
-	else
-		SELFSCRIPTDIR=.
-	fi
-fi
-SELFSCRIPTDIR=`cd -P ${SELFSCRIPTDIR}; pwd`
-SRCTOP=`cd -P ${SELFSCRIPTDIR}/..; pwd`
-SRCDIR=${SRCTOP}/src
-TESTDIR=${SELFSCRIPTDIR}
+PROGRAM_NAME=$(basename "${0}")
+SCRIPTDIR=$(dirname "${0}")
+SCRIPTDIR=$(cd "${SCRIPTDIR}" || exit 1; pwd)
+SRCTOP=$(cd "${SCRIPTDIR}/.." || exit 1; pwd)
+SRCDIR=$(cd "${SRCTOP}/src" || exit 1; pwd)
+TESTSDIR=$(cd "${SRCTOP}/tests" || exit 1; pwd)
 
 if [ "X${NODE_PATH}" != "X" ]; then
 	CHMPX_NODE_PATH=${NODE_PATH}:
@@ -174,7 +161,7 @@ fi
 ##############################################################
 # Do work
 #
-cd ${TESTDIR}
+cd ${TESTSDIR}
 
 if [ "X${SCRIPT_MODE}" = "Xstart_chmpx_server" ]; then
 	echo -n "Run chmpx server processes : "
@@ -191,7 +178,7 @@ if [ "X${SCRIPT_MODE}" = "Xstart_chmpx_server" ]; then
 	#
 	# Run chmpx server process
 	#
-	chmpx -conf ${TESTDIR}/chmpx_server.ini -d silent > /dev/null 2>&1 &
+	chmpx -conf ${TESTSDIR}/chmpx_server.ini -d silent > /dev/null 2>&1 &
 	CHMPX_SERVER_PID=$!
 
 	#
@@ -226,7 +213,7 @@ elif [ "X${SCRIPT_MODE}" = "Xstart_node_server" ]; then
 	#
 	# Run node chmpx server process
 	#
-	TESTDIR_PATH=${TESTDIR} NODE_PATH=${CHMPX_NODE_PATH} node ${TESTDIR}/run_process_test_server.js > /dev/null 2>&1 &
+	TESTDIR_PATH=${TESTSDIR} NODE_PATH=${CHMPX_NODE_PATH} node ${TESTSDIR}/run_process_test_server.js > /dev/null 2>&1 &
 	NODE_CHMPX_SERVER_PID=$!
 
 	#
@@ -261,7 +248,7 @@ elif [ "X${SCRIPT_MODE}" = "Xstart_chmpx_slave" ]; then
 	#
 	# Run chmpx slave process
 	#
-	chmpx -conf ${TESTDIR}/chmpx_slave.ini -d silent > /dev/null 2>&1 &
+	chmpx -conf ${TESTSDIR}/chmpx_slave.ini -d silent > /dev/null 2>&1 &
 	CHMPX_SLAVE_PID=$!
 
 	#
@@ -296,7 +283,7 @@ elif [ "X${SCRIPT_MODE}" = "Xstart_node_slave" ]; then
 	#
 	# Run node chmpx slave process
 	#
-	TESTDIR_PATH=${TESTDIR} NODE_PATH=${CHMPX_NODE_PATH} node ${TESTDIR}/run_process_test_slave.js > /dev/null 2>&1 &
+	TESTDIR_PATH=${TESTSDIR} NODE_PATH=${CHMPX_NODE_PATH} node ${TESTSDIR}/run_process_test_slave.js > /dev/null 2>&1 &
 	NODE_CHMPX_SLAVE_PID=$!
 
 	#
@@ -396,7 +383,10 @@ fi
 exit 0
 
 #
-# VIM modelines
-#
-# vim:set ts=4 fenc=utf-8:
+# Local variables:
+# tab-width: 4
+# c-basic-offset: 4
+# End:
+# vim600: noexpandtab sw=4 ts=4 fdm=marker
+# vim<600: noexpandtab sw=4 ts=4
 #
