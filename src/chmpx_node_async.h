@@ -95,7 +95,6 @@ class InitializeOnWorker : public Nan::AsyncWorker
 		std::string	filename;
 		bool		is_auto_rejoin;
 		bool		is_server;
-		bool		result;
 };
 
 //---------------------------------------------------------
@@ -483,7 +482,10 @@ class ReceiveWorker : public Nan::AsyncWorker
 #endif
 
 /*
- * VIM modelines
- *
- * vim:set ts=4 fenc=utf-8:
+ * Local variables:
+ * tab-width: 4
+ * c-basic-offset: 4
+ * End:
+ * vim600: noexpandtab sw=4 ts=4 fdm=marker
+ * vim<600: noexpandtab sw=4 ts=4
  */

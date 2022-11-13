@@ -17,13 +17,143 @@
 # the license file that was distributed with this source code.
 #
 # AUTHOR:   Takeshi Nakatani
-# CREATE:   Wed, Nov 18 2020
-# REVISION: 1.0
+# CREATE:   Tue, Nov 24 2020
+# REVISION: 1.2
 #
 
-#---------------------------------------------------------------------
-# Helper for nodejs on Github Actions
-#---------------------------------------------------------------------
+#==============================================================
+# Build helper for NodeJS on Github Actions
+#==============================================================
+#
+# Instead of pipefail(for shells not support "set -o pipefail")
+#
+PIPEFAILURE_FILE="/tmp/.pipefailure.$(od -An -tu4 -N4 /dev/random | tr -d ' \n')"
+
+#
+# For shellcheck
+#
+if locale -a | grep -q -i '^[[:space:]]*C.utf8[[:space:]]*$'; then
+	LANG=$(locale -a | grep -i '^[[:space:]]*C.utf8[[:space:]]*$' | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*$//g' | tr -d '\n')
+	LC_ALL="${LANG}"
+	export LANG
+	export LC_ALL
+elif locale -a | grep -q -i '^[[:space:]]*en_US.utf8[[:space:]]*$'; then
+	LANG=$(locale -a | grep -i '^[[:space:]]*en_US.utf8[[:space:]]*$' | sed -e 's/^[[:space:]]*//g' -e 's/[[:space:]]*$//g' | tr -d '\n')
+	LC_ALL="${LANG}"
+	export LANG
+	export LC_ALL
+fi
+
+#==============================================================
+# Common variables
+#==============================================================
+PRGNAME=$(basename "$0")
+SCRIPTDIR=$(dirname "$0")
+SCRIPTDIR=$(cd "${SCRIPTDIR}" || exit 1; pwd)
+SRCTOP=$(cd "${SCRIPTDIR}"/.. || exit 1; pwd)
+
+#
+# Message variables
+#
+IN_GHAGROUP_AREA=0
+
+#
+# Variables with default values
+#
+CI_NODEJS_TYPE=""
+CI_NODEJS_MAJOR_VERSION=""
+
+CI_NODEJS_TYPE_VARS_FILE="${SCRIPTDIR}/nodejstypevars.sh"
+CI_USE_PACKAGECLOUD_REPO=1
+CI_PACKAGECLOUD_OWNER="antpickax"
+CI_PACKAGECLOUD_DOWNLOAD_REPO="stable"
+CI_NPM_TOKEN=""
+CI_FORCE_PUBLISHER=""
+
+CI_IN_SCHEDULE_PROCESS=0
+CI_PUBLISH_TAG_NAME=""
+CI_DO_PUBLISH=0
+
+#==============================================================
+# Utility functions and variables for messaging
+#==============================================================
+#
+# Utilities for message
+#
+if [ -t 1 ] || { [ -n "${CI}" ] && [ "${CI}" = "true" ]; }; then
+	CBLD=$(printf '\033[1m')
+	CREV=$(printf '\033[7m')
+	CRED=$(printf '\033[31m')
+	CYEL=$(printf '\033[33m')
+	CGRN=$(printf '\033[32m')
+	CDEF=$(printf '\033[0m')
+else
+	CBLD=""
+	CREV=""
+	CRED=""
+	CYEL=""
+	CGRN=""
+	CDEF=""
+fi
+if [ -n "${CI}" ] && [ "${CI}" = "true" ]; then
+	GHAGRP_START="::group::"
+	GHAGRP_END="::endgroup::"
+else
+	GHAGRP_START=""
+	GHAGRP_END=""
+fi
+
+PRNGROUPEND()
+{
+	if [ -n "${IN_GHAGROUP_AREA}" ] && [ "${IN_GHAGROUP_AREA}" -eq 1 ]; then
+		if [ -n "${GHAGRP_END}" ]; then
+			echo "${GHAGRP_END}"
+		fi
+	fi
+	IN_GHAGROUP_AREA=0
+}
+PRNTITLE()
+{
+	PRNGROUPEND
+	echo "${GHAGRP_START}${CBLD}${CGRN}${CREV}[TITLE]${CDEF} ${CGRN}$*${CDEF}"
+	IN_GHAGROUP_AREA=1
+}
+PRNINFO()
+{
+	echo "${CBLD}${CREV}[INFO]${CDEF} $*"
+}
+PRNWARN()
+{
+	echo "${CBLD}${CYEL}${CREV}[WARNING]${CDEF} ${CYEL}$*${CDEF}"
+}
+PRNERR()
+{
+	echo "${CBLD}${CRED}${CREV}[ERROR]${CDEF} ${CRED}$*${CDEF}"
+	PRNGROUPEND
+}
+PRNSUCCESS()
+{
+	echo "${CBLD}${CGRN}${CREV}[SUCCEED]${CDEF} ${CGRN}$*${CDEF}"
+	PRNGROUPEND
+}
+PRNFAILURE()
+{
+	echo "${CBLD}${CRED}${CREV}[FAILURE]${CDEF} ${CRED}$*${CDEF}"
+	PRNGROUPEND
+}
+RUNCMD()
+{
+	PRNINFO "Run \"$*\""
+	if ! /bin/sh -c "$*"; then
+		PRNERR "Failed to run \"$*\""
+		return 1
+	fi
+	return 0
+}
+
+#----------------------------------------------------------
+# Helper for NodeJS on Github Actions
+#----------------------------------------------------------
 func_usage()
 {
 	echo ""
@@ -31,7 +161,7 @@ func_usage()
 	echo ""
 	echo "  Required option:"
 	echo "    --help(-h)                                             print help"
-	echo "    --nodejstype(-node)                       <version>    specify nodejs version(ex. \"12\" or \"12.x\" or \"12.0.0...\")"
+	echo "    --nodejstype(-node)                       <version>    specify nodejs version(ex. \"18\" or \"18.x\" or \"18.0.0\")"
 	echo ""
 	echo "  Option:"
 	echo "    --nodejstype-vars-file(-f)                <file path>  specify the file that describes the package list to be installed before build(default is nodejstypevars.sh)"
@@ -44,463 +174,1068 @@ func_usage()
 	echo "    --packagecloudio-owner(-pcowner)          <owner>      owner name of uploading destination to packagecloud.io, this is part of the repository path(default is antpickax)"
 	echo "    --packagecloudio-download-repo(-pcdlrepo) <repository> repository name of installing packages in packagecloud.io, this is part of the repository path(default is stable)"
 	echo ""
+	echo "  Environments:"
+	echo "    ENV_NODEJS_TYPE_VARS_FILE                 the file for custom variables                             ( same as option '--nodejstype-vars-file(-f)' )"
+	echo "    ENV_NPM_TOKEN                             the token for publishing to npm                           ( same as option '--npm-token(-token)' )"
+	echo "    ENV_FORCE_PUBLISHER                       nodejs major version to publish packages                  ( same as option '--force-publisher(-fp)' )"
+	echo "    ENV_USE_PACKAGECLOUD_REPO                 use packagecloud.io repository: true/false                ( same as option '--use-packagecloudio-repo(-usepc)' and '--not-use-packagecloudio-repo(-notpc)' )"
+	echo "    ENV_PACKAGECLOUD_OWNER                    owner name for uploading to packagecloud.io               ( same as option '--packagecloudio-owner(-pcowner)' )"
+	echo "    ENV_PACKAGECLOUD_DOWNLOAD_REPO            repository name of installing packages in packagecloud.io ( same as option '--packagecloudio-download-repo(-pcdlrepo)' )"
+	echo ""
 	echo "  Note:"
-	echo "    This program uses the GITHUB_REF and GITHUB_EVENT_NAME environment variable internally."
+	echo "    Environment variables and options have the same parameter items."
+	echo "    If both are specified, the option takes precedence."
+	echo "    Environment variables are set from Github Actions Secrets, etc."
+	echo "    GITHUB_REF and GITHUB_EVENT_NAME environments are used internally."
 	echo ""
 }
 
+#==============================================================
+# Default execution functions and variables
+#==============================================================
 #
-# Utility functions
+# Execution flag
 #
-prn_cmd()
+RUN_PRE_INSTALL=0
+RUN_INSTALL=1
+RUN_POST_INSTALL=0
+RUN_PRE_AUDIT=0
+RUN_AUDIT=1
+RUN_POST_AUDIT=0
+RUN_CPPCHECK=1
+RUN_SHELLCHECK=1
+RUN_CHECK_OTHER=0
+RUN_PRE_BUILD=0
+RUN_BUILD=1
+RUN_POST_BUILD=0
+RUN_PRE_TEST=0
+RUN_TEST=1
+RUN_POST_TEST=0
+RUN_PRE_PUBLISH=1
+RUN_PUBLISH=1
+RUN_POST_PUBLISH=0
+
+#
+# Before install
+#
+run_pre_install()
 {
-	echo ""
-	echo "$ $@"
+	PRNWARN "Not implement process before install."
+	return 0
 }
 
-run_cmd()
+#
+# Install
+#
+run_install()
 {
-	echo ""
-	echo "$ $@"
-	$@
-	if [ $? -ne 0 ]; then
-		echo "[ERROR] ${PRGNAME} : \"$@\""
-		exit 1
+	if ! /bin/sh -c "npm install"; then
+		PRNERR "Failed to run \"npm install\"."
+		return 1
 	fi
+	return 0
 }
 
-#---------------------------------------------------------------------
-# Common Variables
-#---------------------------------------------------------------------
-PRGNAME=`basename $0`
-MYSCRIPTDIR=`dirname $0`
-MYSCRIPTDIR=`cd ${MYSCRIPTDIR}; pwd`
-SRCTOP=`cd ${MYSCRIPTDIR}/../..; pwd`
+#
+# After install
+#
+run_post_install()
+{
+	PRNWARN "Not implement process after install."
+	return 0
+}
 
-#---------------------------------------------------------------------
-# Parse Options
-#---------------------------------------------------------------------
-echo "[INFO] ${PRGNAME} : Start the parsing of options."
 
-OPT_NODEJS_TYPE=
-OPT_NODEJS_TYPE_VARS_FILE=
-OPT_FORCE_PUBLISHER=
-OPT_USE_PC_REPO=
-OPT_NPM_TOKEN=
-OPT_PC_OWNER=
-OPT_PC_DOWNLOAD_REPO=
+#
+# Before audit
+#
+run_pre_audit()
+{
+	PRNWARN "Not implement process before audit."
+	return 0
+}
+
+#
+# Audit
+#
+run_audit()
+{
+	if ! /bin/sh -c "npm audit"; then
+		PRNERR "Failed to run \"npm audit\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# After audit
+#
+run_post_audit()
+{
+	PRNWARN "Not implement process after audit."
+	return 0
+}
+
+#
+# Check code by CppCheck
+#
+run_cppcheck()
+{
+	if [ -z "${CPPCHECK_TARGET}" ]; then
+		PRNERR "Failed to run \"cppcheck\", target files/dirs is not specified."
+		return 1
+	fi
+
+	CPPCHECK_ENABLE_OPT=""
+	for _one_opt in ${CPPCHECK_ENABLE_VALUES}; do
+		if [ -n "${_one_opt}" ]; then
+			if [ -z "${CPPCHECK_ENABLE_OPT}" ]; then
+				CPPCHECK_ENABLE_OPT="--enable="
+			else
+				CPPCHECK_ENABLE_OPT="${CPPCHECK_ENABLE_OPT},"
+			fi
+			CPPCHECK_ENABLE_OPT="${CPPCHECK_ENABLE_OPT}${_one_opt}"
+		fi
+	done
+
+	CPPCHECK_IGNORE_OPT=""
+	for _one_opt in ${CPPCHECK_IGNORE_VALUES}; do
+		if [ -n "${_one_opt}" ]; then
+			CPPCHECK_IGNORE_OPT="${CPPCHECK_IGNORE_OPT} --suppress=${_one_opt}"
+		fi
+	done
+
+	CPPCHECK_BUILD_DIR_OPT=""
+	if [ -n "${CPPCHECK_BUILD_DIR}" ]; then
+		rm -rf "${CPPCHECK_BUILD_DIR}"
+		if ! mkdir -p "${CPPCHECK_BUILD_DIR}"; then
+			PRNERR "Failed to run \"cppcheck\", could not create ${CPPCHECK_BUILD_DIR} directory."
+			return 1
+		fi
+		CPPCHECK_BUILD_DIR_OPT="--cppcheck-build-dir=${CPPCHECK_BUILD_DIR}"
+	fi
+
+	if ! /bin/sh -c "cppcheck ${CPPCHECK_BASE_OPT} ${CPPCHECK_ENABLE_OPT} ${CPPCHECK_IGNORE_OPT} ${CPPCHECK_BUILD_DIR_OPT} ${CPPCHECK_TARGET}"; then
+		PRNERR "Failed to run \"cppcheck\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# Check code by ShellCheck
+#
+run_shellcheck()
+{
+	#
+	# Targets
+	#
+	if [ -z "${SHELLCHECK_TARGET_DIRS}" ]; then
+		PRNERR "Failed to run \"shellcheck\", target files/dirs is not specified."
+		return 1
+	fi
+
+	SHELLCHECK_TARGET_DIRS_OPT=""
+	for _one_dir in ${SHELLCHECK_TARGET_DIRS}; do
+		if [ -z "${SHELLCHECK_TARGET_DIRS_OPT}" ]; then
+			SHELLCHECK_TARGET_DIRS_OPT="${_one_dir}"
+		else
+			SHELLCHECK_TARGET_DIRS_OPT="${SHELLCHECK_TARGET_DIRS_OPT} ${_one_dir}"
+		fi
+	done
+
+	#
+	# Exclude options
+	#
+	SHELLCHECK_IGN_OPT=""
+	for _one_opt in ${SHELLCHECK_IGN}; do
+		if [ -n "${_one_opt}" ]; then
+			if [ -z "${SHELLCHECK_IGN_OPT}" ]; then
+				SHELLCHECK_IGN_OPT="--exclude="
+			else
+				SHELLCHECK_IGN_OPT="${SHELLCHECK_IGN_OPT},"
+			fi
+			SHELLCHECK_IGN_OPT="${SHELLCHECK_IGN_OPT}${_one_opt}"
+		fi
+	done
+
+	SHELLCHECK_INCLUDE_IGN_OPT="${SHELLCHECK_IGN_OPT}"
+	for _one_opt in ${SHELLCHECK_INCLUDE_IGN}; do
+		if [ -n "${_one_opt}" ]; then
+			if [ -z "${SHELLCHECK_INCLUDE_IGN_OPT}" ]; then
+				SHELLCHECK_INCLUDE_IGN_OPT="--exclude="
+			else
+				SHELLCHECK_INCLUDE_IGN_OPT="${SHELLCHECK_INCLUDE_IGN_OPT},"
+			fi
+			SHELLCHECK_INCLUDE_IGN_OPT="${SHELLCHECK_INCLUDE_IGN_OPT}${_one_opt}"
+		fi
+	done
+
+	#
+	# Target file selection
+	#
+	# [NOTE]
+	# SHELLCHECK_FILES_NO_SH		: Script files with file extension not ".sh" but with "#!<shell command>"
+	# SHELLCHECK_FILES_SH			: Script files with file extension ".sh" and "#!<shell command>"
+	# SHELLCHECK_FILES_INCLUDE_SH	: Files included in script files with file extension ".sh" but without "#!<shell command>"
+	#
+	SHELLCHECK_EXCEPT_PATHS_CMD="| grep -v '\.sh.' | grep -v '\.log' | grep -v '\.git/'"
+	for _one_path in ${SHELLCHECK_EXCEPT_PATHS}; do
+		SHELLCHECK_EXCEPT_PATHS_CMD="${SHELLCHECK_EXCEPT_PATHS_CMD} | grep -v '${_one_path}'"
+	done
+
+	SHELLCHECK_FILES_NO_SH="$(/bin/sh -c      "grep -ril '^\#!/bin/sh' ${SHELLCHECK_TARGET_DIRS} | grep -v '\.sh' ${SHELLCHECK_EXCEPT_PATHS_CMD} | tr '\n' ' '")"
+	SHELLCHECK_FILES_SH="$(/bin/sh -c         "grep -ril '^\#!/bin/sh' ${SHELLCHECK_TARGET_DIRS} | grep '\.sh'    ${SHELLCHECK_EXCEPT_PATHS_CMD} | tr '\n' ' '")"
+	SHELLCHECK_FILES_INCLUDE_SH="$(/bin/sh -c "grep -Lir '^\#!/bin/sh' ${SHELLCHECK_TARGET_DIRS} | grep '\.sh'    ${SHELLCHECK_EXCEPT_PATHS_CMD} | tr '\n' ' '")"
+
+	#
+	# Check scripts
+	#
+	_SHELLCHECK_ERROR=0
+	if [ -n "${SHELLCHECK_FILES_NO_SH}" ]; then
+		if ! /bin/sh -c "shellcheck ${SHELLCHECK_BASE_OPT} ${SHELLCHECK_IGN_OPT} ${SHELLCHECK_FILES_NO_SH}"; then
+			_SHELLCHECK_ERROR=1
+		fi
+	fi
+	if [ -n "${SHELLCHECK_FILES_SH}" ]; then
+		if ! /bin/sh -c "shellcheck ${SHELLCHECK_BASE_OPT} ${SHELLCHECK_IGN_OPT} ${SHELLCHECK_FILES_SH}"; then
+			_SHELLCHECK_ERROR=1
+		fi
+	fi
+	if [ -n "${SHELLCHECK_FILES_INCLUDE_SH}" ]; then
+		if ! /bin/sh -c "shellcheck ${SHELLCHECK_BASE_OPT} ${SHELLCHECK_INCLUDE_IGN_OPT} ${SHELLCHECK_FILES_INCLUDE_SH}"; then
+			_SHELLCHECK_ERROR=1
+		fi
+	fi
+
+	if [ "${_SHELLCHECK_ERROR}" -ne 0 ]; then
+		PRNERR "Failed to run \"shellcheck\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# Check code by Other tools
+#
+run_othercheck()
+{
+	PRNWARN "Not implement check code by Other tools."
+	return 0
+}
+
+#
+# Before Build
+#
+run_pre_build()
+{
+	PRNWARN "Not implement process before building."
+	return 0
+}
+
+#
+# Build
+#
+run_build()
+{
+	if ! /bin/sh -c "npm run build"; then
+		PRNERR "Failed to run \"npm run build\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# After Build
+#
+run_post_build()
+{
+	PRNWARN "Not implement process after building."
+	return 0
+}
+
+#
+# Before Test
+#
+run_pre_test()
+{
+	PRNWARN "Not implement process before testing."
+	return 0
+}
+
+#
+# Test
+#
+run_test()
+{
+	if ! /bin/sh -c "npm run test"; then
+		PRNERR "Failed to run \"npm run test\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# After Test
+#
+run_post_test()
+{
+	PRNWARN "Not implement process after testing."
+	return 0
+}
+
+#
+# Before Publish
+#
+run_pre_publish()
+{
+	if [ -z "${PUBLISH_DOMAIN}" ] || [ -z "${CI_NPM_TOKEN}" ]; then
+		PRNERR "PUBLISH_DOMAIN(=${PUBLISH_DOMAIN}) or CI_NPM_TOKEN(=${CI_NPM_TOKEN}) is empty."
+		return 1
+	fi
+	export NPM_TOKEN="${CI_NPM_TOKEN}"
+
+	if ! echo "//${PUBLISH_DOMAIN}/:_authToken=\${CI_NPM_TOKEN}" > "${HOME}"/.npmrc; then
+		PRNERR "Failed to run process before publish, could not create .npmrc"
+		return 1
+	fi
+	return 0
+}
+
+#
+# Publish
+#
+run_publish()
+{
+	if ! /bin/sh -c "npm publish"; then
+		PRNERR "Failed to run \"npm publish\"."
+		return 1
+	fi
+	return 0
+}
+
+#
+# After Publish
+#
+run_post_publish()
+{
+	PRNWARN "Not implement process after publish."
+	return 0
+}
+
+#==============================================================
+# Check options and environments
+#==============================================================
+PRNTITLE "Start to check options and environments"
+
+#
+# Parse options
+#
+OPT_NODEJS_TYPE=""
+OPT_NODEJS_TYPE_VARS_FILE=""
+OPT_FORCE_PUBLISHER=""
+OPT_USE_PACKAGECLOUD_REPO=
+OPT_PACKAGECLOUD_OWNER=""
+OPT_PACKAGECLOUD_DOWNLOAD_REPO=""
+OPT_NPM_TOKEN=""
 
 while [ $# -ne 0 ]; do
-	if [ "X$1" = "X" ]; then
+	if [ -z "$1" ]; then
 		break
 
-	elif [ "X$1" = "X-h" -o "X$1" = "X-H" -o "X$1" = "X--help" -o "X$1" = "X--HELP" ]; then
-		func_usage $PRGNAME
+	elif [ "$1" = "-h" ] || [ "$1" = "-H" ] || [ "$1" = "--help" ] || [ "$1" = "--HELP" ]; then
+		func_usage "${PRGNAME}"
 		exit 0
 
-	elif [ "X$1" = "X-node" -o "X$1" = "X-NODE" -o "X$1" = "X--nodejstype" -o "X$1" = "X--NODEJSTYPE" ]; then
-		if [ "X${OPT_NODEJS_TYPE}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--nodejstype(-node)\" option."
+	elif [ "$1" = "-node" ] || [ "$1" = "-NODE" ] || [ "$1" = "--nodejstype" ] || [ "$1" = "--NODEJSTYPE" ]; then
+		if [ -n "${OPT_NODEJS_TYPE}" ]; then
+			PRNERR "already set \"--nodejstype(-node)\" option."
 			exit 1
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--nodejstype(-node)\" option is specified without parameter."
+			PRNERR "\"--nodejstype(-node)\" option is specified without parameter."
 			exit 1
 		fi
-		OPT_NODEJS_TYPE=$1
+		OPT_NODEJS_TYPE="$1"
 
-	elif [ "X$1" = "X-f" -o "X$1" = "X-F" -o "X$1" = "X--nodejstype-vars-file" -o "X$1" = "X--NODEJSTYPE-VARS-FILE" ]; then
-		if [ "X${OPT_NODEJS_TYPE_VARS_FILE}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--nodejstype-vars-file(-f)\" option."
+	elif [ "$1" = "-f" ] || [ "$1" = "-F" ] || [ "$1" = "--nodejstype-vars-file" ] || [ "$1" = "--NODEJSTYPE-VARS-FILE" ]; then
+		if [ -n "${OPT_NODEJS_TYPE_VARS_FILE}" ]; then
+			PRNERR "already set \"--nodejstype-vars-file(-f)\" option."
 			exit 1
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--nodejstype-vars-file(-f)\" option is specified without parameter."
+			PRNERR "\"--nodejstype-vars-file(-f)\" option is specified without parameter."
 			exit 1
 		fi
-		if [ ! -f $1 ]; then
-			echo "[ERROR] ${PRGNAME} : $1 file is not existed, it is specified \"--ostype-vars-file(-f)\" option."
+		if [ ! -f "$1" ]; then
+			PRNERR "$1 file is not existed, it is specified \"--ostype-vars-file(-f)\" option."
 			exit 1
 		fi
-		OPT_NODEJS_TYPE_VARS_FILE=$1
+		OPT_NODEJS_TYPE_VARS_FILE="$1"
 
-	elif [ "X$1" = "X-fp" -o "X$1" = "X-FP" -o "X$1" = "X--force-publisher" -o "X$1" = "X--FORCE-PUBLISHER" ]; then
-		if [ "X${OPT_IS_PUBLISH}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--force-publisher(-fp)\" or \"--not-publish(-np)\" option."
-			exit 1
-		fi
-		shift
-		expr $1 + 0 >/dev/null 2>&1
-		if [ $? -ne 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--force-publisher(-fp)\" option specify with Node.js major version(ex, 10/11/12...)."
-			exit 1
-		fi
-		if [ $1 -le 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--force-publisher(-fp)\" option specify with Node.js major version(ex, 10/11/12...)."
-			exit 1
-		fi
-		OPT_FORCE_PUBLISHER=$1
-
-	elif [ "X$1" = "X-usepc" -o "X$1" = "X-USEPC" -o "X$1" = "X--use-packagecloudio-repo" -o "X$1" = "X--USE-PACKAGECLOUDIO-REPO" ]; then
-		if [ "X${OPT_USE_PC_REPO}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--use-packagecloudio-repo(-usepc)\" or \"--not-use-packagecloudio-repo(-notpc)\" option."
-			exit 1
-		fi
-		OPT_USE_PC_REPO="true"
-
-	elif [ "X$1" = "X-notpc" -o "X$1" = "X-NOTPC" -o "X$1" = "X--not-use-packagecloudio-repo" -o "X$1" = "X--NOT-USE-PACKAGECLOUDIO-REPO" ]; then
-		if [ "X${OPT_USE_PC_REPO}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--use-packagecloudio-repo(-usepc)\" or \"--not-use-packagecloudio-repo(-notpc)\" option."
-			exit 1
-		fi
-		OPT_USE_PC_REPO="false"
-
-	elif [ "X$1" = "X-token" -o "X$1" = "X-TOKEN" -o "X$1" = "X--npm-token" -o "X$1" = "X--NPM-TOKEN" ]; then
-		if [ "X${OPT_NPM_TOKEN}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--npm-token(-token)\" option."
+	elif [ "$1" = "-fp" ] || [ "$1" = "-FP" ] || [ "$1" = "--force-publisher" ] || [ "$1" = "--FORCE-PUBLISHER" ]; then
+		if [ -n "${OPT_FORCE_PUBLISHER}" ]; then
+			PRNERR "already set \"--force-publisher(-fp)\" or \"--not-publish(-np)\" option."
 			exit 1
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--npm-token(-token)\" option is specified without parameter."
+			PRNERR "\"--force-publisher(-fp)\" option is specified without parameter."
 			exit 1
 		fi
-		OPT_NPM_TOKEN=$1
+		if echo "$1" | grep -q '[^0-9]'; then
+			PRNERR "\"--force-publisher(-fp)\" option specify with Node.js major version(ex, 14/16/18...)."
+			exit 1
+		fi
+		OPT_FORCE_PUBLISHER="$1"
 
-	elif [ "X$1" = "X-pcowner" -o "X$1" = "X-PCOWNER" -o "X$1" = "X--packagecloudio-owner" -o "X$1" = "X--PACKAGECLOUDIO-OWNER" ]; then
-		if [ "X${OPT_PC_OWNER}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--packagecloudio-owner(-pcowner)\" option."
+	elif [ "$1" = "-usepc" ] || [ "$1" = "-USEPC" ] || [ "$1" = "--use-packagecloudio-repo" ] || [ "$1" = "--USE-PACKAGECLOUDIO-REPO" ]; then
+		if [ -n "${OPT_USE_PACKAGECLOUD_REPO}" ]; then
+			PRNERR "already set \"--use-packagecloudio-repo(-usepc)\" or \"--not-use-packagecloudio-repo(-notpc)\" option."
+			exit 1
+		fi
+		OPT_USE_PACKAGECLOUD_REPO=1
+
+	elif [ "$1" = "-notpc" ] || [ "$1" = "-NOTPC" ] || [ "$1" = "--not-use-packagecloudio-repo" ] || [ "$1" = "--NOT-USE-PACKAGECLOUDIO-REPO" ]; then
+		if [ -n "${OPT_USE_PACKAGECLOUD_REPO}" ]; then
+			PRNERR "already set \"--use-packagecloudio-repo(-usepc)\" or \"--not-use-packagecloudio-repo(-notpc)\" option."
+			exit 1
+		fi
+		OPT_USE_PACKAGECLOUD_REPO=0
+
+	elif [ "$1" = "-token" ] || [ "$1" = "-TOKEN" ] || [ "$1" = "--npm-token" ] || [ "$1" = "--NPM-TOKEN" ]; then
+		if [ -n "${OPT_NPM_TOKEN}" ]; then
+			PRNERR "already set \"--npm-token(-token)\" option."
 			exit 1
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--packagecloudio-owner(-pcowner)\" option is specified without parameter."
+			PRNERR "\"--npm-token(-token)\" option is specified without parameter."
 			exit 1
 		fi
-		OPT_PC_OWNER=$1
+		OPT_NPM_TOKEN="$1"
 
-	elif [ "X$1" = "X-pcdlrepo" -o "X$1" = "X-PCDLREPO" -o "X$1" = "X--packagecloudio-download-repo" -o "X$1" = "X--PACKAGECLOUDIO-DOWNLOAD-REPO" ]; then
-		if [ "X${OPT_PC_DOWNLOAD_REPO}" != "X" ]; then
-			echo "[ERROR] ${PRGNAME} : already set \"--packagecloudio-download-repo(-pcdlrepo)\" option."
+	elif [ "$1" = "-pcowner" ] || [ "$1" = "-PCOWNER" ] || [ "$1" = "--packagecloudio-owner" ] || [ "$1" = "--PACKAGECLOUDIO-OWNER" ]; then
+		if [ -n "${OPT_PACKAGECLOUD_OWNER}" ]; then
+			PRNERR "already set \"--packagecloudio-owner(-pcowner)\" option."
 			exit 1
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			echo "[ERROR] ${PRGNAME} : \"--packagecloudio-download-repo(-pcdlrepo)\" option is specified without parameter."
+			PRNERR "\"--packagecloudio-owner(-pcowner)\" option is specified without parameter."
 			exit 1
 		fi
-		OPT_PC_DOWNLOAD_REPO=$1
+		OPT_PACKAGECLOUD_OWNER="$1"
+
+	elif [ "$1" = "-pcdlrepo" ] || [ "$1" = "-PCDLREPO" ] || [ "$1" = "--packagecloudio-download-repo" ] || [ "$1" = "--PACKAGECLOUDIO-DOWNLOAD-REPO" ]; then
+		if [ -n "${OPT_PACKAGECLOUD_DOWNLOAD_REPO}" ]; then
+			PRNERR "already set \"--packagecloudio-download-repo(-pcdlrepo)\" option."
+			exit 1
+		fi
+		shift
+		if [ $# -eq 0 ]; then
+			PRNERR "\"--packagecloudio-download-repo(-pcdlrepo)\" option is specified without parameter."
+			exit 1
+		fi
+		OPT_PACKAGECLOUD_DOWNLOAD_REPO="$1"
 	fi
 	shift
 done
 
 #
-# Check only options that must be specified
+# [Required option] check NodeJS version
 #
-if [ "X${OPT_NODEJS_TYPE}" = "X" ]; then
-	echo "[ERROR] ${PRGNAME} : \"--nodejstype(-node)\" option is not specified."
+if [ -z "${OPT_NODEJS_TYPE}" ]; then
+	PRNERR "\"--nodejstype(-node)\" option is not specified."
 	exit 1
 else
-	NODE_MAJOR_VERSION=`echo ${OPT_NODEJS_TYPE} | sed 's/[.]/ /g' | awk '{print $1}'`
-	expr ${NODE_MAJOR_VERSION} + 0 >/dev/null 2>&1
-	if [ $? -ne 0 ]; then
-		echo "[ERROR] ${PRGNAME} : \"--nodejstype(-node)\" option specify with Node.js version(ex, 10/10.x/10.0.0/...)."
+	CI_NODEJS_TYPE="${OPT_NODEJS_TYPE}"
+
+	CI_NODEJS_MAJOR_VERSION=$(echo "${CI_NODEJS_TYPE}" | sed -e 's/[.]/ /g' | awk '{print $1}')
+	if echo "${CI_NODEJS_MAJOR_VERSION}" | grep -q '[^0-9]'; then
+		PRNERR "\"NodeJS major version ${CI_NODEJS_MAJOR_VERSION}\" is wrong, it must be number(ex, 14/16/18...)."
 		exit 1
 	fi
-	if [ ${NODE_MAJOR_VERSION} -le 0 ]; then
-		echo "[ERROR] ${PRGNAME} : \"--nodejstype(-node)\" option specify with Node.js version(ex, 10/10.x/10.0.0/...)."
-		exit 1
-	fi
-fi
-
-#---------------------------------------------------------------------
-# Load variables from file
-#---------------------------------------------------------------------
-echo "[INFO] ${PRGNAME} : Load local variables with an external file."
-
-if [ "X${OPT_NODEJS_TYPE_VARS_FILE}" = "X" ]; then
-	NODEJS_TYPE_VARS_FILE="${MYSCRIPTDIR}/nodejstypevars.sh"
-elif [ ! -f ${OPT_NODEJS_TYPE_VARS_FILE} ]; then
-	echo "[WARNING] ${PRGNAME} : not found ${OPT_NODEJS_TYPE_VARS_FILE} file, then default(nodejstypevars.sh) file is used."
-	NODEJS_TYPE_VARS_FILE="${MYSCRIPTDIR}/nodejstypevars.sh"
-else
-	NODEJS_TYPE_VARS_FILE=${OPT_NODEJS_TYPE_VARS_FILE}
-fi
-if [ -f ${NODEJS_TYPE_VARS_FILE} ]; then
-	echo "[INFO] ${PRGNAME} : Load ${NODEJS_TYPE_VARS_FILE} for local variables by Node.js version(${NODE_MAJOR_VERSION}.x)"
-	. ${NODEJS_TYPE_VARS_FILE}
-fi
-
-#---------------------------------------------------------------------
-# Merge other variables
-#---------------------------------------------------------------------
-echo "[INFO] ${PRGNAME} : Set and check local variables."
-
-#
-# Check GITHUB Environment
-#
-IN_PUSH_PROCESS=0
-IN_PR_PROCESS=0
-IN_SCHEDULE_PROCESS=0
-if [ "X${GITHUB_EVENT_NAME}" = "Xpush" ]; then
-	IN_PUSH_PROCESS=1
-elif [ "X${GITHUB_EVENT_NAME}" = "Xpull_request" ]; then
-	IN_PR_PROCESS=1
-elif [ "X${GITHUB_EVENT_NAME}" = "Xschedule" ]; then
-	IN_SCHEDULE_PROCESS=1
-fi
-PUBLISH_TAG_NAME=
-if [ "X${GITHUB_REF}" != "X" ]; then
-	echo ${GITHUB_REF} | grep 'refs/tags/' >/dev/null 2>&1
-	if [ $? -eq 0 ]; then
-		PUBLISH_TAG_NAME=`echo ${GITHUB_REF} | sed 's#refs/tags/##g'`
-	fi
-fi
-
-#
-# Set variables for packagecloud.io
-#
-if [ "X${OPT_USE_PC_REPO}" = "Xfalse" ]; then
-	USE_PC_REPO=0
-else
-	USE_PC_REPO=1
-fi
-if [ "X${OPT_NPM_TOKEN}" != "X" ]; then
-	export NPM_TOKEN=${OPT_NPM_TOKEN}
-else
-	NPM_TOKEN=
-fi
-if [ "X${OPT_PC_OWNER}" != "X" ]; then
-	PC_OWNER=${OPT_PC_OWNER}
-else
-	PC_OWNER="antpickax"
-fi
-if [ "X${OPT_PC_DOWNLOAD_REPO}" != "X" ]; then
-	PC_DOWNLOAD_REPO=${OPT_PC_DOWNLOAD_REPO}
-else
-	PC_DOWNLOAD_REPO="stable"
-fi
-
-#
-# Check whether to publish
-#
-IS_PUBLISHER=0
-if [ "X${PUBLISHER}" = "Xtrue" -o "X${PUBLISHER}" = "XTRUE" -o "X${OPT_FORCE_PUBLISHER}" = "X${NODE_MAJOR_VERSION}" ]; then
-	IS_PUBLISHER=1
-fi
-
-IS_TEST_PACKAGER=0
-PUBLISH_REQUESTED=0
-if [ ${IN_PUSH_PROCESS} -ne 1 ]; then
-	#
-	# Pull Request or Schedule
-	#
-	echo "[INFO] ${PRGNAME} : This build is run by ${GITHUB_EVENT_NAME} event, then do not test packaging."
-
-else
-	#
-	# Push
-	#
-	IS_TEST_PACKAGER=1
-
-	if [ "X${PUBLISH_TAG_NAME}" != "X" ]; then
-		#
-		# Specified Release Tag
-		#
-		if [ "X${NPM_TOKEN}" = "X" ]; then
-			echo "[ERROR] ${PRGNAME} : Specified release tag to publish packages, but NPM token is not specified."
-			exit 1
-		fi
-		PUBLISH_REQUESTED=1
-	fi
-fi
-
-#
-# Information
-#
-echo "[INFO] ${PRGNAME} : All local variables for building and packaging."
-echo "  PRGNAME                 = ${PRGNAME}"
-echo "  MYSCRIPTDIR             = ${MYSCRIPTDIR}"
-echo "  SRCTOP                  = ${SRCTOP}"
-echo "  NODE_MAJOR_VERSION      = ${NODE_MAJOR_VERSION}"
-echo "  NODEJS_TYPE_VARS_FILE   = ${NODEJS_TYPE_VARS_FILE}"
-echo "  INSTALL_PKG_LIST        = ${INSTALL_PKG_LIST}"
-echo "  INSTALLER_BIN           = ${INSTALLER_BIN}"
-echo "  PUBLISH_TAG_NAME        = ${PUBLISH_TAG_NAME}"
-echo "  IN_PUSH_PROCESS         = ${IN_PUSH_PROCESS}"
-echo "  IN_PR_PROCESS           = ${IN_PR_PROCESS}"
-echo "  IN_SCHEDULE_PROCESS     = ${IN_SCHEDULE_PROCESS}"
-echo "  IS_PUBLISHER            = ${IS_PUBLISHER}"
-echo "  IS_TEST_PACKAGER        = ${IS_TEST_PACKAGER}"
-echo "  PUBLISH_REQUESTED       = ${PUBLISH_REQUESTED}"
-echo "  NPM_TOKEN               = **********"
-echo "  USE_PC_REPO             = ${USE_PC_REPO}"
-echo "  PC_OWNER                = ${PC_OWNER}"
-echo "  PC_DOWNLOAD_REPO        = ${PC_DOWNLOAD_REPO}"
-
-#---------------------------------------------------------------------
-# Set package repository on packagecloud.io before build
-#---------------------------------------------------------------------
-if [ ${USE_PC_REPO} -eq 1 ]; then
-	echo "[INFO] ${PRGNAME} : Setup packagecloud.io repository."
-
-	#
-	# Check curl
-	#
-	curl --version >/dev/null 2>&1
-	if [ $? -ne 0 ]; then
-		run_cmd ${INSTALLER_BIN} update -y ${INSTALL_QUIET_ARG}
-		run_cmd ${INSTALLER_BIN} install -y ${INSTALL_QUIET_ARG} curl
-	fi
-
-	#
-	# Download and set packagecloud.io repository
-	#
-	# [NOTE]
-	# The container OS must be ubuntu now.
-	#
-	PC_REPO_ADD_SH="script.deb.sh"
-	prn_cmd "curl -s https://packagecloud.io/install/repositories/${PC_OWNER}/${PC_DOWNLOAD_REPO}/${PC_REPO_ADD_SH} | sudo bash"
-	curl -s https://packagecloud.io/install/repositories/${PC_OWNER}/${PC_DOWNLOAD_REPO}/${PC_REPO_ADD_SH} | sudo bash
-	if [ $? -ne 0 ]; then
-		echo "[ERROR] ${PRGNAME} : could not add packagecloud.io repository."
+	if [ "${CI_NODEJS_MAJOR_VERSION}" -le 0 ]; then
+		PRNERR "\"NodeJS major version ${CI_NODEJS_MAJOR_VERSION}\" is wrong, it must be positive number(ex, 14/16/18...)."
 		exit 1
 	fi
 fi
 
-#---------------------------------------------------------------------
-# Install packages
-#---------------------------------------------------------------------
 #
-# Update
+# Check other options and enviroments
 #
-# [NOTE]
+if [ -n "${OPT_NODEJS_TYPE_VARS_FILE}" ]; then
+	CI_NODEJS_TYPE_VARS_FILE="${OPT_NODEJS_TYPE_VARS_FILE}"
+elif [ -n "${ENV_OSTYPE_VARS_FILE}" ]; then
+	CI_NODEJS_TYPE_VARS_FILE="${ENV_NODEJS_TYPE_VARS_FILE}"
+fi
+
+if [ -n "${OPT_FORCE_PUBLISHER}" ]; then
+	CI_FORCE_PUBLISHER="${OPT_FORCE_PUBLISHER}"
+elif [ -n "${ENV_FORCE_PUBLISHER}" ]; then
+	if echo "${ENV_FORCE_PUBLISHER}" | grep -q '[^0-9]'; then
+		PRNERR "\"ENV_FORCE_PUBLISHER\" environment value must be Node.js major version(ex, 14/16/18...)."
+		exit 1
+	fi
+	CI_FORCE_PUBLISHER="${ENV_FORCE_PUBLISHER}"
+fi
+
+if [ -n "${OPT_USE_PACKAGECLOUD_REPO}" ]; then
+	if [ "${OPT_USE_PACKAGECLOUD_REPO}" -eq 1 ]; then
+		CI_USE_PACKAGECLOUD_REPO=1
+	elif [ "${OPT_USE_PACKAGECLOUD_REPO}" -eq 0 ]; then
+		CI_USE_PACKAGECLOUD_REPO=0
+	else
+		PRNERR "\"OPT_USE_PACKAGECLOUD_REPO\" value is wrong."
+		exit 1
+	fi
+elif [ -n "${ENV_USE_PACKAGECLOUD_REPO}" ]; then
+	if echo "${ENV_USE_PACKAGECLOUD_REPO}" | grep -q -i '^true$'; then
+		CI_USE_PACKAGECLOUD_REPO=1
+	elif echo "${ENV_USE_PACKAGECLOUD_REPO}" | grep -q -i '^false$'; then
+		CI_USE_PACKAGECLOUD_REPO=0
+	else
+		PRNERR "\"ENV_USE_PACKAGECLOUD_REPO\" value is wrong."
+		exit 1
+	fi
+fi
+
+if [ -n "${OPT_PACKAGECLOUD_OWNER}" ]; then
+	CI_PACKAGECLOUD_OWNER="${OPT_PACKAGECLOUD_OWNER}"
+elif [ -n "${ENV_PACKAGECLOUD_OWNER}" ]; then
+	CI_PACKAGECLOUD_OWNER="${ENV_PACKAGECLOUD_OWNER}"
+fi
+
+if [ -n "${OPT_PACKAGECLOUD_DOWNLOAD_REPO}" ]; then
+	CI_PACKAGECLOUD_DOWNLOAD_REPO="${OPT_PACKAGECLOUD_DOWNLOAD_REPO}"
+elif [ -n "${ENV_PACKAGECLOUD_DOWNLOAD_REPO}" ]; then
+	CI_PACKAGECLOUD_DOWNLOAD_REPO="${ENV_PACKAGECLOUD_DOWNLOAD_REPO}"
+fi
+
+if [ -n "${OPT_NPM_TOKEN}" ]; then
+	CI_NPM_TOKEN="${OPT_NPM_TOKEN}"
+elif [ -n "${ENV_NPM_TOKEN}" ]; then
+	CI_NPM_TOKEN="${ENV_NPM_TOKEN}"
+fi
+
+# [NOTE] for ubuntu/debian
 # When start to update, it may come across an unexpected interactive interface.
 # (May occur with time zone updates)
 # Set environment variables to avoid this.
 #
-export DEBIAN_FRONTEND=noninteractive 
+export DEBIAN_FRONTEND=noninteractive
 
-echo "[INFO] ${PRGNAME} : Update local packages."
-run_cmd sudo ${INSTALLER_BIN} update -y ${INSTALL_QUIET_ARG}
+PRNSUCCESS "Start to check options and environments"
+
+#==============================================================
+# Set Variables
+#==============================================================
+#
+# Default command parameters for each phase
+#
+CPPCHECK_TARGET="."
+CPPCHECK_BASE_OPT="--quiet --error-exitcode=1 --inline-suppr -j 4 --std=c++03 --xml --enable=warning,style,information,missingInclude"
+CPPCHECK_ENABLE_VALUES="warning style information missingInclude"
+CPPCHECK_IGNORE_VALUES="missingIncludeSystem unmatchedSuppression"
+CPPCHECK_BUILD_DIR="/tmp/cppcheck"
+
+SHELLCHECK_TARGET_DIRS="."
+SHELLCHECK_BASE_OPT="--shell=sh"
+SHELLCHECK_EXCEPT_PATHS="node_modules/ build/ src/build/"
+SHELLCHECK_IGN="SC1117 SC1090 SC1091"
+SHELLCHECK_INCLUDE_IGN="SC2034 SC2148"
 
 #
-# Install
+# Load variables from file
 #
-if [ "X${INSTALL_PKG_LIST}" != "X" ]; then
-	echo "[INFO] ${PRGNAME} : Install packages."
-	run_cmd sudo ${INSTALLER_BIN} install -y ${INSTALL_QUIET_ARG} ${INSTALL_PKG_LIST}
+PRNTITLE "Load local variables with an external file"
+
+#
+# Load external variable file
+#
+if [ -f "${CI_NODEJS_TYPE_VARS_FILE}" ]; then
+	PRNINFO "Load ${CI_NODEJS_TYPE_VARS_FILE} file for local variables by Node.js version(${CI_NODEJS_MAJOR_VERSION}.x)"
+	. "${CI_NODEJS_TYPE_VARS_FILE}"
+else
+	PRNWARN "${CI_NODEJS_TYPE_VARS_FILE} file is not existed."
+fi
+
+PRNSUCCESS "Load local variables with an external file"
+
+#----------------------------------------------------------
+# Check github actions environments
+#----------------------------------------------------------
+PRNTITLE "Check github actions environments"
+
+#
+# GITHUB_EVENT_NAME Environment
+#
+if [ -n "${GITHUB_EVENT_NAME}" ] && [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+	CI_IN_SCHEDULE_PROCESS=1
+else
+	CI_IN_SCHEDULE_PROCESS=0
 fi
 
 #
-# Print Node.js version
+# GITHUB_REF Environments
 #
-run_cmd node -v
-run_cmd npm version
+if [ -n "${GITHUB_REF}" ] && echo "${GITHUB_REF}" | grep -q 'refs/tags/'; then
+	CI_PUBLISH_TAG_NAME=$(echo "${GITHUB_REF}" | sed -e 's#refs/tags/##g' | tr -d '\n')
+fi
 
-#---------------------------------------------------------------------
-# Build (using /tmp directory)
-#---------------------------------------------------------------------
+PRNSUCCESS "Check github actions environments"
+
+#----------------------------------------------------------
+# Check whether to execute processes
+#----------------------------------------------------------
+PRNTITLE "Check whether to execute processes"
+
 #
-# Copy sources to /tmp directory
+# Check whether to publish
 #
-echo "[INFO] ${PRGNAME} : Copy sources to /tmp directory."
-run_cmd cp -rp ${SRCTOP} /tmp
-TMPSRCTOP=`basename ${SRCTOP}`
-BUILD_SRCTOP="/tmp/${TMPSRCTOP}"
+if [ "${IS_PUBLISHER}" -eq 1 ] || { [ -n "${CI_FORCE_PUBLISHER}" ] && [ "${CI_FORCE_PUBLISHER}" = "${CI_NODEJS_MAJOR_VERSION}" ]; }; then
+	if [ -n "${CI_PUBLISH_TAG_NAME}" ]; then
+		if [ -z "${CI_NPM_TOKEN}" ]; then
+			PRNERR "Specified release tag for publish, but NPM token is not specified."
+			exit 1
+		fi
+		CI_DO_PUBLISH=1
+	fi
+fi
+
+PRNSUCCESS "Check whether to execute processes"
+
+#----------------------------------------------------------
+# Show execution environment variables
+#----------------------------------------------------------
+PRNTITLE "Show execution environment variables"
+
+#
+# Information
+#
+echo "  PRGNAME                       = ${PRGNAME}"
+echo "  SCRIPTDIR                     = ${SCRIPTDIR}"
+echo "  SRCTOP                        = ${SRCTOP}"
+echo ""
+echo "  CI_NODEJS_TYPE                = ${CI_NODEJS_TYPE}"
+echo "  CI_NODEJS_MAJOR_VERSION       = ${CI_NODEJS_MAJOR_VERSION}"
+echo "  CI_NODEJS_TYPE_VARS_FILE      = ${CI_NODEJS_TYPE_VARS_FILE}"
+echo "  CI_IN_SCHEDULE_PROCESS        = ${CI_IN_SCHEDULE_PROCESS}"
+echo "  CI_USE_PACKAGECLOUD_REPO      = ${CI_USE_PACKAGECLOUD_REPO}"
+echo "  CI_PACKAGECLOUD_OWNER         = ${CI_PACKAGECLOUD_OWNER}"
+echo "  CI_PACKAGECLOUD_DOWNLOAD_REPO = ${CI_PACKAGECLOUD_DOWNLOAD_REPO}"
+echo "  CI_NPM_TOKEN                  = **********"
+echo "  CI_FORCE_PUBLISHER            = ${CI_FORCE_PUBLISHER}"
+echo "  CI_PUBLISH_TAG_NAME           = ${CI_PUBLISH_TAG_NAME}"
+echo "  CI_DO_PUBLISH                 = ${CI_DO_PUBLISH}"
+echo ""
+echo "  INSTALL_PKG_LIST              = ${INSTALL_PKG_LIST}"
+echo "  INSTALLER_BIN                 = ${INSTALLER_BIN}"
+echo "  PUBLISH_DOMAIN                = ${PUBLISH_DOMAIN}"
+echo "  IS_PUBLISHER                  = ${IS_PUBLISHER}"
+echo ""
+
+PRNSUCCESS "Show execution environment variables"
+
+#==============================================================
+# Install all packages
+#==============================================================
+PRNTITLE "Update repository and Install curl"
+
+#
+# Update local packages
+#
+PRNINFO "Update local packages"
+if ({ RUNCMD sudo "${INSTALLER_BIN}" update -y "${INSTALL_QUIET_ARG}" || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+	PRNERR "Failed to update local packages"
+	exit 1
+fi
+
+#
+# Check and install curl
+#
+if ! CURLCMD=$(command -v curl); then
+	PRNINFO "Install curl command"
+	if ({ RUNCMD sudo "${INSTALLER_BIN}" install -y "${INSTALL_QUIET_ARG}" curl || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNERR "Failed to install curl command"
+		exit 1
+	fi
+	if ! CURLCMD=$(command -v curl); then
+		PRNERR "Not found curl command"
+		exit 1
+	fi
+else
+	PRNINFO "Already curl is insatlled."
+fi
+PRNSUCCESS "Update repository and Install curl"
+
+#--------------------------------------------------------------
+# Set package repository for packagecloud.io
+#--------------------------------------------------------------
+PRNTITLE "Set package repository for packagecloud.io"
+
+if [ "${CI_USE_PACKAGECLOUD_REPO}" -eq 1 ]; then
+	#
+	# Setup packagecloud.io repository
+	#
+	# [NOTE]
+	# The container OS must be ubuntu now.
+	#
+	PRNINFO "Download script and setup packagecloud.io reposiory"
+	PC_REPO_ADD_SH="script.deb.sh"
+	if ({ RUNCMD "${CURLCMD} -s https://packagecloud.io/install/repositories/${CI_PACKAGECLOUD_OWNER}/${CI_PACKAGECLOUD_DOWNLOAD_REPO}/${PC_REPO_ADD_SH} | sudo bash" || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNERR "Failed to download script or setup packagecloud.io reposiory"
+		exit 1
+	fi
+else
+	PRNINFO "Not set packagecloud.io repository."
+fi
+PRNSUCCESS "Set package repository for packagecloud.io"
+
+#--------------------------------------------------------------
+# Install packages
+#--------------------------------------------------------------
+PRNTITLE "Install packages for building/packaging"
+
+if [ -n "${INSTALL_PKG_LIST}" ]; then
+	PRNINFO "Install packages"
+	if ({ RUNCMD sudo "${INSTALLER_BIN}" install -y "${INSTALL_QUIET_ARG}" "${INSTALL_PKG_LIST}" || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNERR "Failed to install packages"
+		exit 1
+	fi
+else
+	PRNINFO "Specified no packages for installing. "
+fi
+
+PRNSUCCESS "Install packages for building/packaging"
+
+#--------------------------------------------------------------
+# Install cppcheck
+#--------------------------------------------------------------
+PRNTITLE "Install cppcheck"
+
+if [ "${RUN_CPPCHECK}" -eq 1 ]; then
+	PRNINFO "Install cppcheck package."
+
+	# [NOTE]
+	# The container OS must be ubuntu now.
+	#
+	if ({ RUNCMD sudo "${INSTALLER_BIN}" install -y cppcheck || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNERR "Failed to install cppcheck"
+		exit 1
+	fi
+else
+	PRNINFO "Skip to install cppcheck package, because cppcheck process does not need."
+fi
+PRNSUCCESS "Install cppcheck"
+
+#--------------------------------------------------------------
+# Install shellcheck
+#--------------------------------------------------------------
+PRNTITLE "Install shellcheck"
+
+if [ "${RUN_SHELLCHECK}" -eq 1 ]; then
+	PRNINFO "Install shellcheck package."
+
+	# [NOTE]
+	# The container OS must be ubuntu now.
+	#
+	if ({ RUNCMD sudo "${INSTALLER_BIN}" install -y shellcheck || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNERR "Failed to install cppcheck"
+		exit 1
+	fi
+else
+	PRNINFO "Skip to install shellcheck package, because shellcheck process does not need."
+fi
+PRNSUCCESS "Install shellcheck"
+
+#--------------------------------------------------------------
+# Print information about NodeJS
+#--------------------------------------------------------------
+PRNTITLE "Print information about NodeJS"
+
+PRNINFO "NodeJS Version"
+if ({ RUNCMD node -v || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+	PRNERR "Failed to print NodeJS Version"
+	exit 1
+fi
+
+PRNINFO "NPM Version"
+if ({ RUNCMD npm version || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+	PRNERR "Failed to print NPM Version"
+	exit 1
+fi
+
+PRNSUCCESS "Print information about NodeJS"
+
+#==============================================================
+# Processing
+#==============================================================
+#
+# Copy source code to temporary directory
+#
+PRNTITLE "Copy source code to temporary directory"
+if ! RUNCMD cp -rp "${SRCTOP}" /tmp; then
+	PRNERR "Failed to copy source code to temporary directory"
+	exit 1
+fi
+BUILD_SRCTOP="/tmp/$(basename "${SRCTOP}")"
 
 #
 # Change current directory
 #
-echo "[INFO] ${PRGNAME} : Change current directory to ${BUILD_SRCTOP}"
-run_cmd cd ${BUILD_SRCTOP}
+if ! RUNCMD cd "${BUILD_SRCTOP}"; then
+	PRNERR "Failed to chnage current directory to ${BUILD_SRCTOP}"
+	exit 1
+fi
+PRNSUCCESS "Copy source code to temporary directory"
 
+#--------------------------------------------------------------
+# Install NodeJS packages
+#--------------------------------------------------------------
 #
-# Npm install
+# Before install
 #
-echo "[INFO] ${PRGNAME} : Run npm install."
-run_cmd npm install
-
-#
-# Start build
-#
-echo "[INFO] ${PRGNAME} : Run npm run build."
-run_cmd npm run build
-
-#---------------------------------------------------------------------
-# Start test and packaging
-#---------------------------------------------------------------------
-echo "[INFO] ${PRGNAME} : Start test and packaging."
-
-if [ ${DO_NOT_RUN_TEST} -eq 1 ]; then
-	echo "[INFO] ${PRGNAME} : This Node.js version(${NODE_MAJOR_VERSION}.x) is not run test and packaging."
-
-elif [ ${IS_TEST_PACKAGER} -ne 1 ]; then
-	#
-	# Test by npm
-	#
-	run_cmd npm run test
-else
-	#
-	# Using publish-please tools for testing and packaging
-	#
-
-	#
-	# Create .npmrc file
-	#
-	if [ "X${NPM_TOKEN}" != "X" ]; then
-		prn_cmd "echo \"//registry.npmjs.org/:_authToken=\${NPM_TOKEN}\" > ~/.npmrc"
-		echo "//registry.npmjs.org/:_authToken=\${NPM_TOKEN}" > ~/.npmrc
-		if [ $? -ne 0 ]; then
-			echo "[ERROR] ${PRGNAME} : could not create .npmrc file"
-			exit 1
-		fi
+if [ "${RUN_PRE_INSTALL}" -eq 1 ]; then
+	PRNTITLE "Before install"
+	if ({ run_pre_install 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Before install\"."
+		exit 1
 	fi
-
-	#
-	# Modify .publishrc file if need
-	#
-	if [ "X${PUBLISH_TAG_NAME}" = "X" ]; then
-		#
-		# If not tagging, skip checking tag name
-		#
-		#grep -l '"uncommittedChanges": true' .publishrc | xargs sed -i.BAK -e 's/"uncommittedChanges": true/"uncommittedChanges": false/g'
-		grep -l '"gitTag": true' .publishrc | xargs sed -i.BAK -e 's/"gitTag": true/"gitTag": false/g'
-	fi
-	if [ -f .publishrc.BAK ]; then
-		rm -f .publishrc.BAK
-	fi
-	run_cmd cat .publishrc
-
-	#
-	# Option for publish-please command
-	#
-	if [ ${PUBLISH_REQUESTED} -eq 1 -a ${IS_PUBLISHER} -eq 1 ]; then
-		if [ "X${NPM_TOKEN}" != "X" ]; then
-			PUBLISH_PLEASE_OPT=""
-		else
-			echo "[WARNING] ${PRGNAME} : Required to publish, but it did not find NPM token. Therefore, it is executed by dryrun."
-			exit 1
-			PUBLISH_PLEASE_OPT="--dry-run"
-		fi
-	else
-		PUBLISH_PLEASE_OPT="--dry-run"
-	fi
-
-	#
-	# Publish( or test it )
-	#
-	run_cmd npm run publish-please ${PUBLISH_PLEASE_OPT}
-
-	if [ ${PUBLISH_REQUESTED} -eq 1 -a ${IS_PUBLISHER} -eq 1 -a "X${NPM_TOKEN}" != "X" ]; then
-		echo "[INFO] ${PRGNAME} : Succeed publishing npm package, MUST CHECK NPM repository!!"
-	fi
+	PRNSUCCESS "Before install."
 fi
 
-echo ""
-echo "[INFO] ${PRGNAME} : Finish - Node.js version is ${NODE_MAJOR_VERSION}.x"
+#
+# Install
+#
+if [ "${RUN_INSTALL}" -eq 1 ]; then
+	PRNTITLE "Install"
+	if ({ run_install 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Install\"."
+		exit 1
+	fi
+	PRNSUCCESS "Install."
+fi
+
+#
+# After install
+#
+if [ "${RUN_POST_INSTALL}" -eq 1 ]; then
+	PRNTITLE "After install"
+	if ({ run_post_install 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Before install\"."
+		exit 1
+	fi
+	PRNSUCCESS "Before install."
+fi
+
+#--------------------------------------------------------------
+# Audit
+#--------------------------------------------------------------
+#
+# Before Audit
+#
+if [ "${RUN_PRE_AUDIT}" -eq 1 ]; then
+	PRNTITLE "Before Audit"
+	if ({ run_pre_audit 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Before Audit\"."
+		exit 1
+	fi
+	PRNSUCCESS "Before Audit."
+fi
+
+#
+# Audit
+#
+if [ "${RUN_AUDIT}" -eq 1 ]; then
+	PRNTITLE "Audit"
+	if ({ run_audit 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Audit\"."
+		exit 1
+	fi
+	PRNSUCCESS "Audit."
+fi
+
+#
+# After Audit
+#
+if [ "${RUN_POST_AUDIT}" -eq 1 ]; then
+	PRNTITLE "After Audit"
+	if ({ run_post_audit 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"After Audit\"."
+		exit 1
+	fi
+	PRNSUCCESS "After Audit."
+fi
+
+#--------------------------------------------------------------
+# Check code
+#--------------------------------------------------------------
+#
+# CppCheck
+#
+if [ "${RUN_CPPCHECK}" -eq 1 ]; then
+	PRNTITLE "Check code by CppCheck"
+	if ({ run_cppcheck 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Check code by CppCheck\"."
+		exit 1
+	fi
+	PRNSUCCESS "Check code by CppCheck."
+fi
+
+#
+# ShellCheck
+#
+if [ "${RUN_SHELLCHECK}" -eq 1 ]; then
+	PRNTITLE "Check code by ShellCheck"
+	if ({ run_shellcheck 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Check code by ShellCheck\"."
+		exit 1
+	fi
+	PRNSUCCESS "Check code by ShellCheck."
+fi
+
+#
+# Other tools
+#
+if [ "${RUN_CHECK_OTHER}" -eq 1 ]; then
+	PRNTITLE "Check code by Other tools"
+	if ({ run_othercheck 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Check code by Other tools\"."
+		exit 1
+	fi
+	PRNSUCCESS "Check code by Other tools."
+fi
+
+#--------------------------------------------------------------
+# Build
+#--------------------------------------------------------------
+#
+# Before Build
+#
+if [ "${RUN_PRE_BUILD}" -eq 1 ]; then
+	PRNTITLE "Before Build"
+	if ({ run_pre_build 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Before Build\"."
+		exit 1
+	fi
+	PRNSUCCESS "Before Build."
+fi
+
+#
+# Build
+#
+if [ "${RUN_BUILD}" -eq 1 ]; then
+	PRNTITLE "Build"
+	if ({ run_build 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Build\"."
+		exit 1
+	fi
+	PRNSUCCESS "Build."
+fi
+
+#
+# After Build
+#
+if [ "${RUN_POST_BUILD}" -eq 1 ]; then
+	PRNTITLE "After Build"
+	if ({ run_post_build 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"After Build\"."
+		exit 1
+	fi
+	PRNSUCCESS "After Build."
+fi
+
+#--------------------------------------------------------------
+# Test
+#--------------------------------------------------------------
+#
+# Before Test
+#
+if [ "${RUN_PRE_TEST}" -eq 1 ]; then
+	PRNTITLE "Before Test"
+	if ({ run_pre_test 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Before Test\"."
+		exit 1
+	fi
+	PRNSUCCESS "Before Test."
+fi
+
+#
+# Test
+#
+if [ "${RUN_TEST}" -eq 1 ]; then
+	PRNTITLE "Test"
+	if ({ run_test 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"Test\"."
+		exit 1
+	fi
+	PRNSUCCESS "Test."
+fi
+
+#
+# After Test
+#
+if [ "${RUN_POST_TEST}" -eq 1 ]; then
+	PRNTITLE "After Test"
+	if ({ run_post_test 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+		PRNFAILURE "Failed \"After Test\"."
+		exit 1
+	fi
+	PRNSUCCESS "After Test."
+fi
+
+#--------------------------------------------------------------
+# Publish
+#--------------------------------------------------------------
+if [ "${CI_DO_PUBLISH}" -eq 1 ]; then
+	#
+	# Before Publish
+	#
+	if [ "${RUN_PRE_PUBLISH}" -eq 1 ]; then
+		PRNTITLE "Before Publish"
+		if ({ run_pre_publish 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNFAILURE "Failed \"Before Publish\"."
+			exit 1
+		fi
+		PRNSUCCESS "Before Publish."
+	fi
+
+	#
+	# Publish
+	#
+	if [ "${RUN_PUBLISH}" -eq 1 ]; then
+		PRNTITLE "Publish"
+		if ({ run_publish 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNFAILURE "Failed \"Publish\"."
+			exit 1
+		fi
+		PRNSUCCESS "Published, MUST CHECK NPM repository!."
+	fi
+
+	#
+	# After Publish
+	#
+	if [ "${RUN_POST_PUBLISH}" -eq 1 ]; then
+		PRNTITLE "After Publish"
+		if ({ run_post_publish 2>&1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNFAILURE "Failed \"After Publish\"."
+			exit 1
+		fi
+		PRNSUCCESS "After Publish."
+	fi
+else
+	PRNTITLE "Publish processing"
+	PRNSUCCESS "This CI process does not publish package."
+fi
+
+#----------------------------------------------------------
+# Finish
+#----------------------------------------------------------
+PRNSUCCESS "Finished all processing without error."
 
 exit 0
 

@@ -13,8 +13,7 @@
   },
   "devDependencies": {
     "chai": "^4.3.6",
-    "mocha": "^10.0.0",
-    "publish-please": "^5.5.2"
+    "mocha": "^10.0.0"
   },
   "scripts": {
     "build": "npm run build:before && npm run build:configure && npm run build:rebuild && npm run build:linkdir && npm run build:after",
@@ -27,9 +26,7 @@
     "test:all": "npm run test:chmpx",
     "test:chmpx": "echo \"Test - All\" && tests/test.sh && echo \"Finished\"",
     "test:chmpx:slave": "echo \"Test - chmpx slave\" && tests/test.sh chmpx_slave && echo \"Finished\"",
-    "test:chmpx:server": "echo \"Test - chmpx server\" && tests/test.sh chmpx_server && echo \"Finished\"",
-    "publish-please": "publish-please",
-    "prepublishOnly": "publish-please guard"
+    "test:chmpx:server": "echo \"Test - chmpx server\" && tests/test.sh chmpx_server && echo \"Finished\""
   },
   "repository": {
     "type": "git",
