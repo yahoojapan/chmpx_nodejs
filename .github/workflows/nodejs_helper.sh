@@ -975,23 +975,16 @@ PRNSUCCESS "Print information about NodeJS"
 # Processing
 #==============================================================
 #
-# Copy source code to temporary directory
-#
-PRNTITLE "Copy source code to temporary directory"
-if ! RUNCMD cp -rp "${SRCTOP}" /tmp; then
-	PRNERR "Failed to copy source code to temporary directory"
-	exit 1
-fi
-BUILD_SRCTOP="/tmp/$(basename "${SRCTOP}")"
-
-#
 # Change current directory
 #
-if ! RUNCMD cd "${BUILD_SRCTOP}"; then
-	PRNERR "Failed to chnage current directory to ${BUILD_SRCTOP}"
+PRNTITLE "Change current directory"
+
+if ! RUNCMD cd "${SRCTOP}"; then
+	PRNERR "Failed to chnage current directory to ${SRCTOP}"
 	exit 1
 fi
-PRNSUCCESS "Copy source code to temporary directory"
+
+PRNSUCCESS "Changed current directory"
 
 #--------------------------------------------------------------
 # Install NodeJS packages
