@@ -126,14 +126,14 @@ fi
 #	CPPCHECK_TARGET					"."
 #	CPPCHECK_BASE_OPT				"--quiet --error-exitcode=1 --inline-suppr -j 4 --std=c++03 --xml"
 #	CPPCHECK_ENABLE_VALUES			"warning style information missingInclude"
-#	CPPCHECK_IGNORE_VALUES			"missingIncludeSystem unmatchedSuppression"
+#	CPPCHECK_IGNORE_VALUES			"unmatchedSuppression"
 #	CPPCHECK_BUILD_DIR				"/tmp/cppcheck"
 #
 #	SHELLCHECK_TARGET_DIRS			"."
 #	SHELLCHECK_BASE_OPT				"--shell=sh"
 #	SHELLCHECK_EXCEPT_PATHS			"/node_modules/ /build/ /src/build/"
 #	SHELLCHECK_IGN					"SC1117 SC1090 SC1091"
-#	SHELLCHECK_INCLUDE_IGN			"SC2034"
+#	SHELLCHECK_INCLUDE_IGN			"SC2034 SC2148"
 #
 
 #---------------------------------------------------------------
