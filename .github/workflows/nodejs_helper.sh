@@ -370,7 +370,7 @@ run_shellcheck()
 	# SHELLCHECK_FILES_SH			: Script files with file extension ".sh" and "#!<shell command>"
 	# SHELLCHECK_FILES_INCLUDE_SH	: Files included in script files with file extension ".sh" but without "#!<shell command>"
 	#
-	SHELLCHECK_EXCEPT_PATHS_CMD="| grep -v '\.sh\.' | grep -v '\.log' | grep -v '/\.git/'"
+	SHELLCHECK_EXCEPT_PATHS_CMD="| grep -v '\.log' | grep -v '/\.git/'"
 	for _one_path in ${SHELLCHECK_EXCEPT_PATHS}; do
 		SHELLCHECK_EXCEPT_PATHS_CMD="${SHELLCHECK_EXCEPT_PATHS_CMD} | grep -v '${_one_path}'"
 	done
