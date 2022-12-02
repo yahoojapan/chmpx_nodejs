@@ -42,7 +42,11 @@ on:
 #
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # [NOTE]
+    # We plan to update to ubuntu-latest (22.04) soon.
+    # Right now I am forced to use 20.04 as there are no relevant packages yet.
+    #
+    runs-on: ubuntu-20.04
 
     strategy:
       #

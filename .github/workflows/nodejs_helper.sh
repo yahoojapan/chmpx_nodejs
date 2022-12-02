@@ -335,15 +335,6 @@ run_shellcheck()
 		return 1
 	fi
 
-	SHELLCHECK_TARGET_DIRS_OPT=""
-	for _one_dir in ${SHELLCHECK_TARGET_DIRS}; do
-		if [ -z "${SHELLCHECK_TARGET_DIRS_OPT}" ]; then
-			SHELLCHECK_TARGET_DIRS_OPT="${_one_dir}"
-		else
-			SHELLCHECK_TARGET_DIRS_OPT="${SHELLCHECK_TARGET_DIRS_OPT} ${_one_dir}"
-		fi
-	done
-
 	#
 	# Exclude options
 	#
@@ -379,7 +370,7 @@ run_shellcheck()
 	# SHELLCHECK_FILES_SH			: Script files with file extension ".sh" and "#!<shell command>"
 	# SHELLCHECK_FILES_INCLUDE_SH	: Files included in script files with file extension ".sh" but without "#!<shell command>"
 	#
-	SHELLCHECK_EXCEPT_PATHS_CMD="| grep -v '\.sh.' | grep -v '\.log' | grep -v '\.git/'"
+	SHELLCHECK_EXCEPT_PATHS_CMD="| grep -v '\.sh\.' | grep -v '\.log' | grep -v '/\.git/'"
 	for _one_path in ${SHELLCHECK_EXCEPT_PATHS}; do
 		SHELLCHECK_EXCEPT_PATHS_CMD="${SHELLCHECK_EXCEPT_PATHS_CMD} | grep -v '${_one_path}'"
 	done
@@ -739,12 +730,12 @@ PRNSUCCESS "Start to check options and environments"
 CPPCHECK_TARGET="."
 CPPCHECK_BASE_OPT="--quiet --error-exitcode=1 --inline-suppr -j 4 --std=c++03 --xml --enable=warning,style,information,missingInclude"
 CPPCHECK_ENABLE_VALUES="warning style information missingInclude"
-CPPCHECK_IGNORE_VALUES="missingIncludeSystem unmatchedSuppression"
+CPPCHECK_IGNORE_VALUES="unmatchedSuppression"
 CPPCHECK_BUILD_DIR="/tmp/cppcheck"
 
 SHELLCHECK_TARGET_DIRS="."
 SHELLCHECK_BASE_OPT="--shell=sh"
-SHELLCHECK_EXCEPT_PATHS="node_modules/ build/ src/build/"
+SHELLCHECK_EXCEPT_PATHS="/node_modules/ /build/ /src/build/"
 SHELLCHECK_IGN="SC1117 SC1090 SC1091"
 SHELLCHECK_INCLUDE_IGN="SC2034 SC2148"
 
