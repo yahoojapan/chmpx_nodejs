@@ -7,15 +7,14 @@ chmpx nodejs addon library
 [![GitHub issues](https://img.shields.io/github/issues/yahoojapan/chmpx_nodejs.svg)](https://github.com/yahoojapan/chmpx_nodejs/issues)
 [![NPM packages](https://badge.fury.io/js/chmpx.svg)](https://badge.fury.io/js/chmpx)
 
-CHMPX addon library for Node.js .
- - CHMPX - inprocess data exchange by MQ with consistent hashing library by Yahoo! JAPAN
+CHMPX addon library for Node.js
 
 ### Overview
 CHMPX nodejs is the Node.js addon library of the CHMPX communication middleware library by Yahoo! JAPAN.  
 CHMPX is a product of a communication middleware library and tools for binary communication between processes over network.  
 
 By chmpx nodejs addon library, you can easily incorporate CHMPX communication function into Node.js based program.  
-For CHMPX nodejs's features and functions, refer to [chmpx documentation](https://chmpx.antpick.ax/).  
+For CHMPX nodejs's features and functions, see the [chmpx nodejs documentation](https://nodejs.chmpx.antpick.ax/) and [chmpx documentation](https://chmpx.antpick.ax/).  
 
 ![CHMPX Node.js addon](https://nodejs.chmpx.antpick.ax/images/top_chmpx_nodejs.png)
 
