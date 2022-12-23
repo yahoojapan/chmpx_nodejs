@@ -1,7 +1,7 @@
 #
 # CHMPX
 #
-# Copyright 2020 Yahoo JAPAN corporation.
+# Copyright 2020 Yahoo Japan corporation.
 #
 # CHMPX is inprocess data exchange by MQ with consistent hashing.
 # CHMPX is made for the purpose of the construction of

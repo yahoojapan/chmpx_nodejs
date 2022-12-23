@@ -43,4 +43,4 @@ This software is released under the MIT License, see the license file.
 ### AntPickax
 CHMPX is one of [AntPickax](https://antpick.ax/) products.
 
-Copyright(C) 2015 Yahoo! JAPAN corporation.
+Copyright(C) 2015 Yahoo Japan Corporation.
