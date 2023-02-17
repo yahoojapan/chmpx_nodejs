@@ -1,3 +1,20 @@
+chmpx (1.0.13) unstable; urgency=low
+
+  * Added build flags and removed unnecessary files - #30
+  * Updated header and footer in comment lines - #29
+  * Updated issue/pullrequest templates and README.md - #27
+  * Reviewed ShellCheck processing again - #26
+  * Reviewed ShellCheck processing and fixed bugs - #25
+  * Eliminated unnecessary copies in nodejs_helper.sh - #24
+  * Updated packages - #23
+  * Updated github actions and nodejs version, and fixed bugs - #22
+  * Changed run_process_helper.sh simply instead of the which command etc - #21
+  * Renamed the test directory to tests and run_test.sh to test.sh - #20
+  * Removed install entry from scripts in package.json file - #19
+  * Cleaned up package.json and updated related package versions - #18
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Fri, 17 Feb 2023 20:52:43 +0900
+
 chmpx (1.0.12) unstable; urgency=low
 
   * Updated some npm packages, added .auditignore, etc - #16
