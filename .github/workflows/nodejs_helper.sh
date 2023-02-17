@@ -484,10 +484,14 @@ run_pre_publish()
 		PRNERR "PUBLISH_DOMAIN(=${PUBLISH_DOMAIN}) or CI_NPM_TOKEN(=${CI_NPM_TOKEN}) is empty."
 		return 1
 	fi
-	export NPM_TOKEN="${CI_NPM_TOKEN}"
+	export NODE_AUTH_TOKEN="${CI_NPM_TOKEN}"
 
-	if ! echo "//${PUBLISH_DOMAIN}/:_authToken=\${CI_NPM_TOKEN}" > "${HOME}"/.npmrc; then
-		PRNERR "Failed to run process before publish, could not create .npmrc"
+	if ! echo "https://${PUBLISH_DOMAIN}/" > "${HOME}"/.npmrc; then
+		PRNERR "Failed to run process before publish, could not set domain to .npmrc"
+		return 1
+	fi
+	if ! echo "//${PUBLISH_DOMAIN}/:_authToken=${NODE_AUTH_TOKEN}" >> "${HOME}"/.npmrc; then
+		PRNERR "Failed to run process before publish, could not set token to .npmrc"
 		return 1
 	fi
 	return 0
