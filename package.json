@@ -22,6 +22,7 @@
     "build:rebuild": "if [ -f src/binding.gyp ]; then cd src; fi && node-gyp rebuild --verbose --release --target_arch=x64 --coverage=true",
     "build:linkdir": "if [ ! -f build -a ! -s build ]; then ln -s src/build .; fi",
     "build:after": "echo \"Build - Succeed\"",
+    "install": "npm run build",
     "test": "npm run test:all",
     "test:all": "npm run test:chmpx",
     "test:chmpx": "echo \"Test - All\" && tests/test.sh && echo \"Finished\"",
