@@ -1,3 +1,9 @@
+chmpx (1.0.14) unstable; urgency=low
+
+  * Fixed package.json for install command - #32
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Mon, 20 Feb 2023 12:42:53 +0900
+
 chmpx (1.0.13) unstable; urgency=low
 
   * Added build flags and removed unnecessary files - #30
