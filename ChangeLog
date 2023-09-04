@@ -1,3 +1,9 @@
+chmpx (1.0.16) unstable; urgency=low
+
+  * Updated support NodeJS version - #37
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Mon, 04 Sep 2023 14:32:56 +0900
+
 chmpx (1.0.15) unstable; urgency=low
 
   * Updated building/packaging scripts - #34
