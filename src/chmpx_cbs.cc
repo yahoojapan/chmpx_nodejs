@@ -77,7 +77,7 @@ bool StackEmitCB::Set(const char* pemitname, Nan::Callback* cbfunc)
 
 	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
 
-	Nan::Callback*	oldcbfunc = RawFind(pemitname);
+	const Nan::Callback*	oldcbfunc = RawFind(pemitname);
 	if(oldcbfunc){
 		EmitCbsMap.erase(stremit);
 	}
@@ -98,7 +98,7 @@ bool StackEmitCB::Unset(const char* pemitname)
 
 	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
 
-	Nan::Callback*	oldcbfunc = RawFind(pemitname);
+	const Nan::Callback*	oldcbfunc = RawFind(pemitname);
 	if(oldcbfunc){
 		EmitCbsMap.erase(stremit);
 	}
