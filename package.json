@@ -9,10 +9,10 @@
   },
   "dependencies": {
     "bindings": "^1.5.0",
-    "nan": "^2.18.0"
+    "nan": "^2.19.0"
   },
   "devDependencies": {
-    "chai": "^4.3.10",
+    "chai": "^4.4.1",
     "mocha": "^10.2.0"
   },
   "scripts": {
