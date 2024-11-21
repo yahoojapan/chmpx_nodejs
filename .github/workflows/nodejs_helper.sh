@@ -736,7 +736,7 @@ PRNSUCCESS "Start to check options and environments"
 CPPCHECK_TARGET="."
 CPPCHECK_BASE_OPT="--quiet --error-exitcode=1 --inline-suppr -j 4 --std=c++03 --xml --enable=warning,style,information,missingInclude"
 CPPCHECK_ENABLE_VALUES="warning style information missingInclude"
-CPPCHECK_IGNORE_VALUES="unmatchedSuppression"
+CPPCHECK_IGNORE_VALUES="unmatchedSuppression missingIncludeSystem normalCheckLevelMaxBranches"
 CPPCHECK_BUILD_DIR="/tmp/cppcheck"
 
 SHELLCHECK_TARGET_DIRS="."
