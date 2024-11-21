@@ -83,7 +83,7 @@ initialize_pid_file()
 		PROC_ZOMBIE=""
 		for _one_pid in ${PIDS}; do
 			# shellcheck disable=SC2009
-			if PSRESULT=$(ps -p "${_one_pid}" 2>&1 | grep -v 'PID'); then
+			if PSRESULT=$(ps -p "${_one_pid}" -F 2>&1 | grep -v 'PID'); then
 				if echo "${PSRESULT}" | grep "${_one_pid}" | grep -q 'defunct'; then
 					PROC_ZOMBIE="${PROC_ZOMBIE} ${_one_pid}"
 				else
