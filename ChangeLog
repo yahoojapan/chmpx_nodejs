@@ -1,3 +1,9 @@
+chmpx (1.0.21) unstable; urgency=low
+
+  * Changed supported OS and NodeJS version - #47
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Thu, 21 Nov 2024 17:00:04 +0900
+
 chmpx (1.0.20) unstable; urgency=low
 
   * Updated github actions tools and dependencies - #45
