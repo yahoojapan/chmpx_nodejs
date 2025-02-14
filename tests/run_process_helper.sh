@@ -69,12 +69,17 @@ initialize_pid_file()
 		#
 		# force kill if exists yet
 		#
+		TMP_RUN_KILL=0
 		for _one_pid in ${PIDS}; do
-			if ps -p "${_one_pid}" >/dev/null 2>&1; then
-				kill -9 "${_one_pid}" >/dev/null 2>&1
-				sleep 1
+			# shellcheck disable=SC2009
+			if ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${_one_pid}$" || exit 1 && exit 0 ); then
+				kill -KILL "${_one_pid}" >/dev/null 2>&1
+				TMP_RUN_KILL=1
 			fi
 		done
+		if [ "${TMP_RUN_KILL}" -eq 1 ]; then
+			sleep 2
+		fi
 
 		#
 		# recheck pid
@@ -83,20 +88,30 @@ initialize_pid_file()
 		PROC_ZOMBIE=""
 		for _one_pid in ${PIDS}; do
 			# shellcheck disable=SC2009
-			if PSRESULT=$(ps -p "${_one_pid}" -F 2>&1 | grep -v 'PID'); then
-				if echo "${PSRESULT}" | grep "${_one_pid}" | grep -q 'defunct'; then
+			if ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${_one_pid}$" || exit 1 && exit 0 ); then
+				#
+				# Found process id(not zombie)
+				#
+				PROC_NOT_ZOMBIE="${PROC_NOT_ZOMBIE} ${_one_pid}"
+			else
+				# shellcheck disable=SC2009
+				if ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | grep -q "^${_one_pid}$" || exit 1 && exit 0 ); then
+					#
+					# Found process id(zombie)
+					#
 					PROC_ZOMBIE="${PROC_ZOMBIE} ${_one_pid}"
 				else
-					PROC_NOT_ZOMBIE="${PROC_NOT_ZOMBIE} ${_one_pid}"
+					#
+					# Not found process id
+					#
+					:
 				fi
 			fi
 		done
-
 		if [ -n "${PROC_NOT_ZOMBIE}" ]; then
 			printf '[ERROR] could not stop process(%s) / ' "${PROC_NOT_ZOMBIE}"
 			return 1
 		fi
-
 		if [ -n "${PROC_ZOMBIE}" ]; then
 			printf '[WARNING] could not stop process(%s) because it was zombie, but we can continue... / ' "${PROC_ZOMBIE}"
 		fi
@@ -125,35 +140,35 @@ while [ $# -ne 0 ]; do
 	if [ -z "$1" ]; then
 		break
 
-	elif [ "$1" = "-h" ] || [ "$1" = "-H" ] || [ "$1" = "--help" ] || [ "$1" = "--HELP" ]; then
+	elif echo "$1" | grep -q -i -e "^-h$" -e "^--help$"; then
 		PrintUsage "${PRGNAME}"
 		exit 0
 
-	elif [ "$1" = "start_chmpx_server" ] || [ "$1" = "START_CHMPX_SERVER" ]; then
+	elif echo "$1" | grep -q -i "^start_chmpx_server$"; then
 		SCRIPT_MODE="start_chmpx_server"
 
-	elif [ "$1" = "start_node_server" ] || [ "$1" = "START_NODE_SERVER" ]; then
+	elif echo "$1" | grep -q -i "^start_node_server$"; then
 		SCRIPT_MODE="start_node_server"
 
-	elif [ "$1" = "start_chmpx_slave" ] || [ "$1" = "START_CHMPX_SLAVE" ]; then
+	elif echo "$1" | grep -q -i "^start_chmpx_slave$"; then
 		SCRIPT_MODE="start_chmpx_slave"
 
-	elif [ "$1" = "start_node_slave" ] || [ "$1" = "START_NODE_SLAVE" ]; then
+	elif echo "$1" | grep -q -i "^start_node_slave$"; then
 		SCRIPT_MODE="start_node_slave"
 
-	elif [ "$1" = "stop_chmpx_server" ] || [ "$1" = "STOP_CHMPX_SERVER" ]; then
+	elif echo "$1" | grep -q -i "^stop_chmpx_server$"; then
 		SCRIPT_MODE="stop_chmpx_server"
 
-	elif [ "$1" = "stop_node_server" ] || [ "$1" = "STOP_NODE_SERVER" ]; then
+	elif echo "$1" | grep -q -i "^stop_node_server$"; then
 		SCRIPT_MODE="stop_node_server"
 
-	elif [ "$1" = "stop_chmpx_slave" ] || [ "$1" = "STOP_CHMPX_SLAVE" ]; then
+	elif echo "$1" | grep -q -i "^stop_chmpx_slave$"; then
 		SCRIPT_MODE="stop_chmpx_slave"
 
-	elif [ "$1" = "stop_node_slave" ] || [ "$1" = "STOP_NODE_SLAVE" ]; then
+	elif echo "$1" | grep -q -i "^stop_node_slave$"; then
 		SCRIPT_MODE="stop_node_slave"
 
-	elif [ "$1" = "stop_all" ] || [ "$1" = "STOP_ALL" ]; then
+	elif echo "$1" | grep -q -i "^stop_all$"; then
 		SCRIPT_MODE="stop_all"
 
 	else
@@ -200,12 +215,13 @@ if [ "${SCRIPT_MODE}" = "start_chmpx_server" ]; then
 	#
 	chmpx -conf "${TESTSDIR}"/chmpx_server.ini -d silent >/dev/null 2>&1 &
 	CHMPX_SERVER_PID=$!
+	sleep 1
 
 	#
 	# Check process
 	#
-	sleep 1
-	if ! ps -p "${CHMPX_SERVER_PID}" >/dev/null 2>&1; then
+	# shellcheck disable=SC2009
+	if ! ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${CHMPX_SERVER_PID}$" || exit 1 && exit 0 ); then
 		echo "[ERROR] could not run chmpx server process."
 		exit 1
 	fi
@@ -233,12 +249,13 @@ elif [ "${SCRIPT_MODE}" = "start_node_server" ]; then
 	#
 	TESTDIR_PATH="${TESTSDIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${TESTSDIR}"/run_process_test_server.js >/dev/null 2>&1 &
 	NODE_CHMPX_SERVER_PID=$!
+	sleep 1
 
 	#
 	# Check process
 	#
-	sleep 1
-	if ! ps -p "${NODE_CHMPX_SERVER_PID}" >/dev/null 2>&1; then
+	# shellcheck disable=SC2009
+	if ! ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${NODE_CHMPX_SERVER_PID}$" || exit 1 && exit 0 ); then
 		echo "[ERROR] could not run node chmpx server process."
 		exit 1
 	fi
@@ -266,12 +283,13 @@ elif [ "${SCRIPT_MODE}" = "start_chmpx_slave" ]; then
 	#
 	chmpx -conf "${TESTSDIR}"/chmpx_slave.ini -d silent >/dev/null 2>&1 &
 	CHMPX_SLAVE_PID=$!
+	sleep 1
 
 	#
 	# Check process
 	#
-	sleep 1
-	if ! ps -p "${CHMPX_SLAVE_PID}" >/dev/null 2>&1; then
+	# shellcheck disable=SC2009
+	if ! ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${CHMPX_SLAVE_PID}$" || exit 1 && exit 0 ); then
 		echo "[ERROR] could not run chmpx slave process."
 		exit 1
 	fi
@@ -299,12 +317,13 @@ elif [ "${SCRIPT_MODE}" = "start_node_slave" ]; then
 	#
 	TESTDIR_PATH="${TESTSDIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${TESTSDIR}"/run_process_test_slave.js >/dev/null 2>&1 &
 	NODE_CHMPX_SLAVE_PID=$!
+	sleep 1
 
 	#
 	# Check process
 	#
-	sleep 1
-	if ! ps -p "${NODE_CHMPX_SLAVE_PID}" >/dev/null 2>&1; then
+	# shellcheck disable=SC2009
+	if ! ( ps -o pid,stat ax 2>/dev/null | grep -v 'PID' | awk '$2~/^[^Z]/ { print $1 }' | grep -q "^${NODE_CHMPX_SLAVE_PID}$" || exit 1 && exit 0 ); then
 		echo "[ERROR] could not run node chmpx slave process."
 		exit 1
 	fi

@@ -30,6 +30,10 @@ name: Node.js AntPickax CI
 #
 on:
   push:
+    branches-ignore:
+      - 'gh-pages'
+    tags:
+      - '*'
   pull_request:
   #
   # CRON event is fire on every sunday(UTC).
@@ -77,6 +81,7 @@ jobs:
       #    NODEJS_TYPE_VARS_FILE      : specify custom variables file
       #  * NPM_TOKEN                  : The token for publishing to npm
       #    FORCE_PUBLISHER            : nodejs major version to publish packages
+      #    FORCE_NOT_PUBLISHER        : do not allow to publish any packages(for forked repository)
       #    USE_PACKAGECLOUD_REPO      : true means using pacakgecloud.io repo, false is not using
       #    PACKAGECLOUD_OWNER         : owner name as a pat of path to packagcloud.io for downloading
       #    PACKAGECLOUD_DOWNLOAD_REPO : repo name as a pat of path to packagcloud.io for downloading
@@ -88,6 +93,7 @@ jobs:
           echo "ENV_NODEJS_TYPE_VARS_FILE=${{ secrets.NODEJS_TYPE_VARS_FILE }}"           >> "${GITHUB_ENV}"
           echo "ENV_NPM_TOKEN=${{ secrets.NPM_TOKEN }}"                                   >> "${GITHUB_ENV}"
           echo "ENV_FORCE_PUBLISHER=${{ secrets.FORCE_PUBLISHER }}"                       >> "${GITHUB_ENV}"
+          echo "ENV_FORCE_NOT_PUBLISHER=${{ secrets.FORCE_NOT_PUBLISHER }}"               >> "${GITHUB_ENV}"
           echo "ENV_USE_PACKAGECLOUD_REPO=${{ secrets.USE_PACKAGECLOUD_REPO }}"           >> "${GITHUB_ENV}"
           echo "ENV_PACKAGECLOUD_OWNER=${{ secrets.PACKAGECLOUD_OWNER }}"                 >> "${GITHUB_ENV}"
           echo "ENV_PACKAGECLOUD_DOWNLOAD_REPO=${{ secrets.PACKAGECLOUD_DOWNLOAD_REPO }}" >> "${GITHUB_ENV}"
