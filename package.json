@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "chai": "^4.5.0",
-    "mocha": "^10.8.2"
+    "mocha": "^11.1.0"
   },
   "scripts": {
     "build": "npm run build:before && npm run build:configure && npm run build:rebuild && npm run build:linkdir && npm run build:after",
