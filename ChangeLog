@@ -1,3 +1,9 @@
+chmpx (1.0.23) unstable; urgency=low
+
+  * Updated a dependent package version(mocha) - #51
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Mon, 17 Feb 2025 10:41:54 +0900
+
 chmpx (1.0.22) unstable; urgency=low
 
   * Changed publish NodeJS versions to v22 and Fixed scripts, etc - #49
