@@ -33,450 +33,560 @@
 //---------------------------------------------------------
 // InitializeOnWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, const char* pfile, bool is_auto, bool is_on_server)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, const std::string& filename, bool is_auto, bool is_on_server)
 // Callback function:	function(string error)
 //
 //---------------------------------------------------------
-class InitializeOnWorker : public Nan::AsyncWorker
+class InitializeOnWorker : public Napi::AsyncWorker
 {
 	public:
-		InitializeOnWorker(Nan::Callback* callback, ChmCntrl* pobj, const char* pfile, bool is_auto, bool is_on_server) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), filename(pfile ? pfile : ""), is_auto_rejoin(is_auto), is_server(is_on_server) {}
-		~InitializeOnWorker() {}
-
-		void Execute()
+		InitializeOnWorker(const Napi::Function& callback, ChmCntrl* pobj, const std::string& filename, bool is_auto, bool is_on_server) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _filename(filename), _is_auto_rejoin(is_auto), _is_server(is_on_server)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			pchmpxcntrl->Clean();
-			bool	result;
-			if(is_server){
-				result = pchmpxcntrl->InitializeOnServer(filename.c_str(), is_auto_rejoin);
-			}else{
-				result = pchmpxcntrl->InitializeOnSlave(filename.c_str(), is_auto_rejoin);
-			}
-			if(!result){
-				// set error
-				this->SetErrorMessage("Failed to initialize chmpx object on server.");
+			_callbackRef.Ref();
+		}
+
+		~InitializeOnWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null() };
-
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
 				return;
+			}
+
+			_chmpxcntrl->Clean();
+			if(_is_server){
+				if(!_chmpxcntrl->InitializeOnServer(_filename.c_str(), _is_auto_rejoin)){
+					SetError(std::string("Failed to initialize chmpx object on server: ") + _filename);	// call SetError method in Napi::AsyncWorker
+					return;
+				}
+			}else{
+				if(!_chmpxcntrl->InitializeOnSlave(_filename.c_str(), _is_auto_rejoin)){
+					SetError(std::string("Failed to initialize chmpx object on slave: ") + _filename);	// call SetError method in Napi::AsyncWorker
+					return;
+				}
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null() });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*	pchmpxcntrl;
-		std::string	filename;
-		bool		is_auto_rejoin;
-		bool		is_server;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		std::string				_filename;
+		bool					_is_auto_rejoin;
+		bool					_is_server;
 };
 
 //---------------------------------------------------------
 // OpenWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, bool no_giveup)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, bool no_giveup)
 // Callback function:	function(string error[, msgid_t msgid]])
 //
 //---------------------------------------------------------
-class OpenWorker : public Nan::AsyncWorker
+class OpenWorker : public Napi::AsyncWorker
 {
 	public:
-		OpenWorker(Nan::Callback* callback, ChmCntrl* pobj, bool no_giveup) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), no_giveup_rejoin(no_giveup), msgid(CHM_INVALID_MSGID) {}
-		~OpenWorker() {}
-
-		void Execute()
+		OpenWorker(const Napi::Function& callback, ChmCntrl* pobj, bool no_giveup) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _no_giveup_rejoin(no_giveup), _msgid(CHM_INVALID_MSGID)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			if(CHM_INVALID_MSGID == (msgid = pchmpxcntrl->Open(no_giveup_rejoin))){
-				// set error
-				this->SetErrorMessage("Failed to open msgid.");
+			_callbackRef.Ref();
+		}
+
+		~OpenWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 2;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null(), Nan::Encode(&msgid, sizeof(msgid_t), Nan::BINARY) };
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
+				return;
+			}
 
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			if(CHM_INVALID_MSGID == (_msgid = _chmpxcntrl->Open(_no_giveup_rejoin))){
+				SetError(std::string("Failed to open msgid."));
 				return;
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null(), Napi::Buffer<char>::Copy(Env(), reinterpret_cast<char*>(&_msgid), static_cast<size_t>(sizeof(_msgid))) });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*	pchmpxcntrl;
-		bool		no_giveup_rejoin;
-		msgid_t		msgid;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		bool					_no_giveup_rejoin;
+		msgid_t					_msgid;
 };
 
 //---------------------------------------------------------
 // CloseWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, msgid_t msgid)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, msgid_t msgid)
 // Callback function:	function(string error)
 //
 //---------------------------------------------------------
-class CloseWorker : public Nan::AsyncWorker
+class CloseWorker : public Napi::AsyncWorker
 {
 	public:
-		CloseWorker(Nan::Callback* callback, ChmCntrl* pobj, msgid_t msgid) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), close_msgid(msgid) {}
-		~CloseWorker() {}
-
-		void Execute()
+		CloseWorker(const Napi::Function& callback, ChmCntrl* pobj, msgid_t msgid) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _close_msgid(msgid)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			if(false == pchmpxcntrl->Close(close_msgid)){
-				// set error
-				this->SetErrorMessage("Failed to close msgid.");
+			_callbackRef.Ref();
+		}
+
+		~CloseWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null() };
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
+				return;
+			}
 
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			if(false == _chmpxcntrl->Close(_close_msgid)){
+				SetError(std::string("Failed to close msgid."));
 				return;
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null() });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*	pchmpxcntrl;
-		msgid_t		close_msgid;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		msgid_t					_close_msgid;
 };
 
 //---------------------------------------------------------
 // SendWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash, bool is_routing)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash, bool is_routing)
 // Callback function:	function(string error[, int receivercount])
 //
 //---------------------------------------------------------
-class SendWorker : public Nan::AsyncWorker
+class SendWorker : public Napi::AsyncWorker
 {
 	public:
-		SendWorker(Nan::Callback* callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash, bool is_routing) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), msgid(send_msgid), pbin(pbinptr), length(binsize), hash(binhash), routing(is_routing), recievercnt(-1) {}
-		~SendWorker() {}
-
-		void Execute()
+		SendWorker(const Napi::Function& callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash, bool is_routing) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _msgid(send_msgid), _pbin(pbinptr), _length(binsize), _hash(binhash), _routing(is_routing), _recievercnt(-1)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			recievercnt	= 0;
-			if(!pchmpxcntrl->Send(msgid, pbin, length, hash, &recievercnt, routing)){
-				// set error
-				this->SetErrorMessage("Failed to send data.");
+			_callbackRef.Ref();
+		}
+
+		~SendWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 2;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null(), Nan::New<v8::Integer>(static_cast<int32_t>(recievercnt)) };
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
+				return;
+			}
 
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			_recievercnt	= 0;
+			if(!_chmpxcntrl->Send(_msgid, _pbin, _length, _hash, &_recievercnt, _routing)){
+				SetError(std::string("Failed to send data."));
 				return;
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null(), Napi::Number::New(env, static_cast<int32_t>(_recievercnt)) });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*		pchmpxcntrl;
-		msgid_t			msgid;
-		unsigned char*	pbin;
-		ssize_t			length;
-		chmhash_t		hash;
-		bool			routing;
-		long			recievercnt;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		msgid_t					_msgid;
+		unsigned char*			_pbin;
+		ssize_t					_length;
+		chmhash_t				_hash;
+		bool					_routing;
+		long					_recievercnt;
 };
 
 //---------------------------------------------------------
 // BroadcastWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash)
 // Callback function:	function(string error[, int receivercount])
 //
 //---------------------------------------------------------
-class BroadcastWorker : public Nan::AsyncWorker
+class BroadcastWorker : public Napi::AsyncWorker
 {
 	public:
-		BroadcastWorker(Nan::Callback* callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), msgid(send_msgid), pbin(pbinptr), length(binsize), hash(binhash), recievercnt(-1) {}
-		~BroadcastWorker() {}
-
-		void Execute()
+		BroadcastWorker(const Napi::Function& callback, ChmCntrl* pobj, msgid_t send_msgid, unsigned char* pbinptr, ssize_t binsize, chmhash_t binhash) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _msgid(send_msgid), _pbin(pbinptr), _length(binsize), _hash(binhash), _recievercnt(-1)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			recievercnt	= 0;
-			if(!pchmpxcntrl->Broadcast(msgid, pbin, length, hash, &recievercnt)){
-				// set error
-				this->SetErrorMessage("Failed to broadcast data.");
+			_callbackRef.Ref();
+		}
+
+		~BroadcastWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 2;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null(), Nan::New<v8::Integer>(static_cast<int32_t>(recievercnt)) };
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
+				return;
+			}
 
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			_recievercnt	= 0;
+			if(!_chmpxcntrl->Broadcast(_msgid, _pbin, _length, _hash, &_recievercnt)){
+				SetError(std::string("Failed to broadcast data."));
 				return;
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null(), Napi::Number::New(env, static_cast<int32_t>(_recievercnt)) });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*		pchmpxcntrl;
-		msgid_t			msgid;
-		unsigned char*	pbin;
-		ssize_t			length;
-		chmhash_t		hash;
-		long			recievercnt;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		msgid_t					_msgid;
+		unsigned char*			_pbin;
+		ssize_t					_length;
+		chmhash_t				_hash;
+		long					_recievercnt;
 };
 
 //---------------------------------------------------------
 // ReplyWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, PCOMPKT compkt, unsigned char* pbinptr, ssize_t binsize)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, PCOMPKT compkt, unsigned char* pbinptr, ssize_t binsize)
 // Callback function:	function(string error)
 //
 //---------------------------------------------------------
-class ReplyWorker : public Nan::AsyncWorker
+class ReplyWorker : public Napi::AsyncWorker
 {
 	public:
-		ReplyWorker(Nan::Callback* callback, ChmCntrl* pobj, PCOMPKT compkt, unsigned char* pbinptr, ssize_t binsize) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), pComPkt(compkt), pbin(pbinptr), length(binsize) {}
-		~ReplyWorker() {}
-
-		void Execute()
+		ReplyWorker(const Napi::Function& callback, ChmCntrl* pobj, PCOMPKT compkt, unsigned char* pbinptr, ssize_t binsize) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _pComPkt(compkt), _pbin(pbinptr), _length(binsize)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
-				return;
-			}
-			if(!pchmpxcntrl->Reply(pComPkt, pbin, length)){
-				// set error
-				this->SetErrorMessage("Failed to broadcast data.");
+			_callbackRef.Ref();
+		}
+
+		~ReplyWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
 			}
 		}
 
-		void HandleOKCallback()
+		// Run on worker thread
+		void Execute() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null() };
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
+				return;
+			}
 
-			if(callback){
-				callback->Call(argc, argv);
-			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
+			if(!_chmpxcntrl->Reply(_pComPkt, _pbin, _length)){
+				SetError(std::string("Failed to broadcast data."));
 				return;
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for success
+		void OnOK() override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ env.Null() });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
-        }
+		}
+
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
+
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
+			}else{
+				// Throw error
+				err.ThrowAsJavaScriptException();
+			}
+		}
 
 	private:
-		ChmCntrl*		pchmpxcntrl;
-		PCOMPKT			pComPkt;
-		unsigned char*	pbin;
-		ssize_t			length;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		PCOMPKT					_pComPkt;
+		unsigned char*			_pbin;
+		ssize_t					_length;
 };
 
 //---------------------------------------------------------
 // ReceiveWorker class
 //
-// Constructor:			constructor(Nan::Callback* callback, ChmCntrl* pobj, int timeout, bool no_giveup)
-// 						constructor(Nan::Callback* callback, ChmCntrl* pobj, msgid_t rcv_msgid, int timeout)
+// Constructor:			constructor(const Napi::Function& callback, ChmCntrl* pobj, int timeout, bool no_giveup)
+// 						constructor(const Napi::Function& callback, ChmCntrl* pobj, msgid_t rcv_msgid, int timeout)
 // Callback function:	function(string error[, binary compkt, buffer data])
 //
 //---------------------------------------------------------
-class ReceiveWorker : public Nan::AsyncWorker
+class ReceiveWorker : public Napi::AsyncWorker
 {
 	public:
-		ReceiveWorker(Nan::Callback* callback, ChmCntrl* pobj, int timeout, bool no_giveup) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), is_on_server(true), msgid(CHM_INVALID_MSGID), timeout_ms(timeout), no_giveup_rejoin(no_giveup), pComPkt(NULL), pBody(NULL), Length(0) {}
-		ReceiveWorker(Nan::Callback* callback, ChmCntrl* pobj, msgid_t rcv_msgid, int timeout) : Nan::AsyncWorker(callback), pchmpxcntrl(pobj), is_on_server(false), msgid(rcv_msgid), timeout_ms(timeout), no_giveup_rejoin(false), pComPkt(NULL), pBody(NULL), Length(0) {}
-		~ReceiveWorker()
+		ReceiveWorker(const Napi::Function& callback, ChmCntrl* pobj, int timeout, bool no_giveup) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _is_server(true), _msgid(CHM_INVALID_MSGID), _timeout_ms(timeout), _no_giveup_rejoin(no_giveup), _pComPkt(NULL), _pBody(NULL), _length(0)
 		{
-			CHM_Free(pComPkt);
-			CHM_Free(pBody);
+			_callbackRef.Ref();
 		}
 
-		void Execute()
+		ReceiveWorker(const Napi::Function& callback, ChmCntrl* pobj, msgid_t rcv_msgid, int timeout) :
+			Napi::AsyncWorker(callback), _callbackRef(Napi::Persistent(callback)), _chmpxcntrl(pobj), _is_server(false), _msgid(rcv_msgid), _timeout_ms(timeout), _no_giveup_rejoin(false), _pComPkt(NULL), _pBody(NULL), _length(0)
 		{
-			if(!pchmpxcntrl){
-				Nan::ReferenceError("No object is associated to async worker");
+			_callbackRef.Ref();
+		}
+
+		~ReceiveWorker() override
+		{
+			if(_callbackRef){
+				_callbackRef.Unref();
+				_callbackRef.Reset();
+			}
+			CHM_Free(_pComPkt);
+			CHM_Free(_pBody);
+		}
+
+		// Run on worker thread
+		void Execute() override
+		{
+			if(!_chmpxcntrl){
+				SetError("No object is associated to async worker");
 				return;
 			}
 
 			// receive
 			bool	result;
-			if(is_on_server){
-				result = pchmpxcntrl->Receive(&pComPkt, &pBody, &Length, timeout_ms, no_giveup_rejoin);
+			if(_is_server){
+				result = _chmpxcntrl->Receive(&_pComPkt, &_pBody, &_length, _timeout_ms, _no_giveup_rejoin);
 			}else{
-				result = pchmpxcntrl->Receive(msgid, &pComPkt, &pBody, &Length, timeout_ms);
+				result = _chmpxcntrl->Receive(_msgid, &_pComPkt, &_pBody, &_length, _timeout_ms);
 			}
-			if(!result || !pComPkt || !pBody || 0 == Length){
-				// set error
-				this->SetErrorMessage("Failed to receive data.");
+			if(!result || !_pComPkt || !_pBody || 0 == _length){
+				SetError(std::string("Failed to receive data."));
+				return;
 			}
 		}
 
-		void HandleOKCallback()
+		// handler for success
+		void OnOK() override
 		{
-			Nan::HandleScope		scope;
-			const int				argc		= 3;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::Null(), Nan::Encode(pComPkt, sizeof(COMPKT), Nan::BINARY), Nan::Encode(pBody, Length, Nan::BUFFER) };
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is null and the second argument is the result.
+			if(!_callbackRef.IsEmpty()){
+				Napi::Value	pktBuf	= Napi::Buffer<char>::Copy(env, reinterpret_cast<char*>(_pComPkt), static_cast<size_t>(sizeof(COMPKT)));
+				Napi::Value	bodyBuf	= Napi::Buffer<char>::Copy(env, reinterpret_cast<char*>(_pBody), static_cast<size_t>(_length));
+				_callbackRef.Value().Call({ env.Null(), pktBuf, bodyBuf });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				Napi::TypeError::New(env, "Internal error in async worker").ThrowAsJavaScriptException();
 			}
 		}
 
-        void HandleErrorCallback()
-        {
-			Nan::HandleScope		scope;
-			const int				argc		= 1;
-			v8::Local<v8::Value>	argv[argc]	= { Nan::New<v8::String>(this->ErrorMessage()).ToLocalChecked() };
+		// handler for failure (by calling SetError)
+		void OnError(const Napi::Error& err) override
+		{
+			Napi::Env env = Env();
+			Napi::HandleScope scope(env);
 
-			if(callback){
-				callback->Call(argc, argv);
+			// The first argument is the error message.
+			if(!_callbackRef.IsEmpty()){
+				_callbackRef.Value().Call({ Napi::String::New(env, err.Value().ToString().Utf8Value()) });
 			}else{
-				Nan::ThrowSyntaxError("Internal error in async worker");
-				return;
+				// Throw error
+				err.ThrowAsJavaScriptException();
 			}
-        }
+		}
 
 	private:
-		ChmCntrl*		pchmpxcntrl;
-		bool			is_on_server;
-		msgid_t			msgid;
-		int				timeout_ms;
-		bool			no_giveup_rejoin;
-		PCOMPKT			pComPkt;
-		unsigned char*	pBody;
-		size_t			Length;
+		Napi::FunctionReference	_callbackRef;
+		ChmCntrl*				_chmpxcntrl;
+		bool					_is_server;
+		msgid_t					_msgid;
+		int						_timeout_ms;
+		bool					_no_giveup_rejoin;
+		PCOMPKT					_pComPkt;
+		unsigned char*			_pBody;
+		size_t					_length;
 };
 
 #endif

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "CommonJS",
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "outDir": "build/cjs",
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

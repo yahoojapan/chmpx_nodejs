@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "ESNext",
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "outDir": "build/esm",
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/**/*"
+  ]
+}

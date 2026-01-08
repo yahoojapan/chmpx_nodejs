@@ -23,7 +23,7 @@
 #------------------------------------------------------------------------------------
 # Github Actions
 #------------------------------------------------------------------------------------
-name: Node.js AntPickax CI
+name: NodeJS addon AntPickax CI
 
 #
 # Events
@@ -42,6 +42,13 @@ on:
     - cron: '0 15 * * 0'
 
 #
+# Npm Trusted Publishing + OIDC
+#
+permissions:
+  contents: write
+  id-token: write
+
+#
 # Jobs
 #
 jobs:
@@ -55,8 +62,39 @@ jobs:
       fail-fast: false
 
       matrix:
-        node-version: [18, 20, 22]
+        container:
+          - ubuntu:24.04
+          - ubuntu:22.04
+          - debian:trixie
+          - debian:bookworm
+          - debian:bullseye
+          - rockylinux/rockylinux:10
+          - rockylinux:9
+          - rockylinux:8
+          - fedora:42
+          - fedora:41
+          - alpine:3.22
+          - alpine:3.21
+          - alpine:3.20
 
+        node-version:
+          - 20
+          - 22
+          - 24
+
+    container:
+      image: ${{ matrix.container }}
+
+    env:
+      #
+      # Installation special environment variables for ubuntu(debian).
+      #
+      DEBIAN_FRONTEND:  noninteractive
+
+    # [NOTE] about shell
+    # In rockylinux:10, an error occurs when executing that the shell(sh) cannot be found.
+    # Therefore, each step is executed with an explicit shell(specified full path like /bin/sh).
+    #
     steps:
       #
       # Checks-out your repository under $GITHUB_WORKSPACE, so your
@@ -65,45 +103,49 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-
       #
       # Set environments from secrets
       #
       # [NOTE] Secrets
       # Use Secrets of organization or repository as parameters to
-      # pass to nodejs_helper.sh for building and packaging, .
+      # pass to nodejs_addon_helper.sh for building and packaging.
       #
       # The available Secret variables are listed below:
+      #    GITHUB_TOKEN               : Github token(automatically set by github actions)
       #    NODEJS_TYPE_VARS_FILE      : specify custom variables file
-      #  * NPM_TOKEN                  : The token for publishing to npm
       #    FORCE_PUBLISHER            : nodejs major version to publish packages
       #    FORCE_NOT_PUBLISHER        : do not allow to publish any packages(for forked repository)
       #    USE_PACKAGECLOUD_REPO      : true means using pacakgecloud.io repo, false is not using
       #    PACKAGECLOUD_OWNER         : owner name as a pat of path to packagcloud.io for downloading
       #    PACKAGECLOUD_DOWNLOAD_REPO : repo name as a pat of path to packagcloud.io for downloading
+      #    NPM_TOKEN                  : [Deprecated] The token for publishing to npm
       #
-      # "NPM_TOKEN" is required variable to publish the package.
+      # NPM Trusted Publisher for NPM package should be set, so you won't need
+      # to specify NPM_TOKEN.
+      # If you set NPM_TOKEN(not recommended), it will be used to publish.
+      # When publishing a package to an NPM repository, you need to upload the
+      #  package for the first time and then configure NPM Trusted Publisher.
+      # For this reason, specify NPM_TOKEN the first time you upload a package.
+      # From the second time onwards (after configuring NPM Trusted Publisher),
+      # delete NPM_TOKEN.
       #
       - name: Set environments from secrets
         run: |
+          echo "ENV_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}"                             >> "${GITHUB_ENV}"
           echo "ENV_NODEJS_TYPE_VARS_FILE=${{ secrets.NODEJS_TYPE_VARS_FILE }}"           >> "${GITHUB_ENV}"
-          echo "ENV_NPM_TOKEN=${{ secrets.NPM_TOKEN }}"                                   >> "${GITHUB_ENV}"
           echo "ENV_FORCE_PUBLISHER=${{ secrets.FORCE_PUBLISHER }}"                       >> "${GITHUB_ENV}"
           echo "ENV_FORCE_NOT_PUBLISHER=${{ secrets.FORCE_NOT_PUBLISHER }}"               >> "${GITHUB_ENV}"
           echo "ENV_USE_PACKAGECLOUD_REPO=${{ secrets.USE_PACKAGECLOUD_REPO }}"           >> "${GITHUB_ENV}"
           echo "ENV_PACKAGECLOUD_OWNER=${{ secrets.PACKAGECLOUD_OWNER }}"                 >> "${GITHUB_ENV}"
           echo "ENV_PACKAGECLOUD_DOWNLOAD_REPO=${{ secrets.PACKAGECLOUD_DOWNLOAD_REPO }}" >> "${GITHUB_ENV}"
+          echo "ENV_NPM_TOKEN=${{ secrets.NPM_TOKEN }}"                                   >> "${GITHUB_ENV}"
 
       #
       # Run building and packaging helper
       #
       - name: Run building and packaging
         run: |
-          /bin/sh -c "$GITHUB_WORKSPACE/.github/workflows/nodejs_helper.sh -node ${{ matrix.node-version }}"
+          /bin/sh -c "$GITHUB_WORKSPACE/.github/workflows/nodejs_addon_helper.sh -os ${{ matrix.container }} -node ${{ matrix.node-version }}"
 
 #
 # Local variables:

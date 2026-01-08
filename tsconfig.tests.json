@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.cjs.json",
+  "compilerOptions": {
+    "outDir": "tests_cjs",
+    "rootDir": "tests",
+    "sourceMap": false,
+    "types": ["node", "mocha"],
+    "baseUrl": ".",
+    "paths": {
+      "chmpx": ["types/index.d.ts"],
+      "chmpx/*": ["types/*"]
+    }
+  },
+  "include": [
+    "tests/**/*"
+  ]
+}

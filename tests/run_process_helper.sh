@@ -29,7 +29,8 @@ SCRIPTDIR=$(dirname "$0")
 SCRIPTDIR=$(cd "${SCRIPTDIR}" || exit 1; pwd)
 SRCTOP=$(cd "${SCRIPTDIR}/.." || exit 1; pwd)
 SRCDIR=$(cd "${SRCTOP}/src" || exit 1; pwd)
-TESTSDIR=$(cd "${SRCTOP}/tests" || exit 1; pwd)
+TESTS_DIR="${SRCTOP}/tests"
+CJS_TESTS_DIR="${SRCTOP}/tests_cjs"
 
 #
 # pid files
@@ -130,11 +131,12 @@ initialize_pid_file()
 PrintUsage()
 {
 	echo ""
-	echo "Usage: $1 [--help(-h)] [ start_chmpx_server | start_node_server | start_chmpx_slave | start_node_slave | stop_chmpx_server | stop_node_server | stop_chmpx_slave | stop_node_slave | stop_all ]"
+	echo "Usage: $1 [--help(-h)] [--commonjs(-cjs)] [ start_chmpx_server | start_node_server | start_chmpx_slave | start_node_slave | stop_chmpx_server | stop_node_server | stop_chmpx_slave | stop_node_slave | stop_all ]"
 	echo ""
 }
 
 SCRIPT_MODE=""
+IS_COMMON_JS=0
 
 while [ $# -ne 0 ]; do
 	if [ -z "$1" ]; then
@@ -143,6 +145,13 @@ while [ $# -ne 0 ]; do
 	elif echo "$1" | grep -q -i -e "^-h$" -e "^--help$"; then
 		PrintUsage "${PRGNAME}"
 		exit 0
+
+	elif echo "$1" | grep -q -i -e "^-cjs$" -e "^--commonjs$"; then
+		if [ "${IS_COMMON_JS}" -ne 0 ]; then
+			echo "[ERROR] Already --commonjs(-cjs) option is specified."
+			exit 1
+		fi
+		IS_COMMON_JS=1
 
 	elif echo "$1" | grep -q -i "^start_chmpx_server$"; then
 		SCRIPT_MODE="start_chmpx_server"
@@ -191,10 +200,21 @@ if [ -n "${NODE_PATH}" ]; then
 fi
 CHMPX_NODE_PATH="${CHMPX_NODE_PATH}${SRCDIR}/build/Release"
 
+#----------------------------------------------------------
+# Base directory and script type(CJS/TS)
+#----------------------------------------------------------
+if [ "${IS_COMMON_JS}" -eq 0 ]; then
+	PROG_DIR="${TESTS_DIR}"
+	JS_SUFFIX=".ts"
+else
+	PROG_DIR="${CJS_TESTS_DIR}"
+	JS_SUFFIX=".js"
+fi
+
 #==========================================================
 # Executing(current at TESTDIR)
 #==========================================================
-cd "${TESTSDIR}" || exit 1
+cd "${TESTS_DIR}" || exit 1
 
 #----------------------------------------------------------
 # Do work
@@ -213,7 +233,7 @@ if [ "${SCRIPT_MODE}" = "start_chmpx_server" ]; then
 	#
 	# Run chmpx server process
 	#
-	chmpx -conf "${TESTSDIR}"/chmpx_server.ini -d silent >/dev/null 2>&1 &
+	chmpx -conf "${TESTS_DIR}"/chmpx_server.ini >/dev/null 2>&1 &
 	CHMPX_SERVER_PID=$!
 	sleep 1
 
@@ -247,7 +267,7 @@ elif [ "${SCRIPT_MODE}" = "start_node_server" ]; then
 	#
 	# Run node chmpx server process
 	#
-	TESTDIR_PATH="${TESTSDIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${TESTSDIR}"/run_process_test_server.js >/dev/null 2>&1 &
+	TESTS_PATH="${TESTS_DIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${PROG_DIR}/run_process_test_server${JS_SUFFIX}" >/dev/null 2>&1 &
 	NODE_CHMPX_SERVER_PID=$!
 	sleep 1
 
@@ -281,7 +301,7 @@ elif [ "${SCRIPT_MODE}" = "start_chmpx_slave" ]; then
 	#
 	# Run chmpx slave process
 	#
-	chmpx -conf "${TESTSDIR}"/chmpx_slave.ini -d silent >/dev/null 2>&1 &
+	chmpx -conf "${TESTS_DIR}"/chmpx_slave.ini >/dev/null 2>&1 &
 	CHMPX_SLAVE_PID=$!
 	sleep 1
 
@@ -315,7 +335,7 @@ elif [ "${SCRIPT_MODE}" = "start_node_slave" ]; then
 	#
 	# Run node chmpx slave process
 	#
-	TESTDIR_PATH="${TESTSDIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${TESTSDIR}"/run_process_test_slave.js >/dev/null 2>&1 &
+	TESTS_PATH="${TESTS_DIR}" NODE_PATH="${CHMPX_NODE_PATH}" node "${PROG_DIR}/run_process_test_slave${JS_SUFFIX}" >/dev/null 2>&1 &
 	NODE_CHMPX_SLAVE_PID=$!
 	sleep 1
 

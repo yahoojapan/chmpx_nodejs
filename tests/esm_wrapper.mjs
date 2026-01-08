@@ -16,28 +16,26 @@
  * the license file that was distributed with this source code.
  *
  * AUTHOR:   Takeshi Nakatani
- * CREATE:   Thu Nov 8 2018
+ * CREATE:   Wed Jan 7 2026
  * REVISION:
  *
  */
 
-'use strict';
+//--------------------------------------------------------------
+// Warning Suppression Wrapper
+//--------------------------------------------------------------
+// This file is a wrapper that enables or disables the 
+// "--experimental-loader warning when running tests as follows:
+//
+//	$ node --loader esm.mjs --experimental-specifier-resolution=node mocha --extensions ts unit_chmpx_server.ts
+//	  (node:XXXX) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+//
+//--------------------------------------------------------------
 
-//
-// Common Chai objects for each test modules.
-//
-var chai			= require('chai');
-var chmpxnode		= require('chmpx');
-var	testdirpath		= __dirname;
+import { register } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
-//
-// Exports
-//
-exports.chai		= chai;
-exports.chmpxnode	= chmpxnode;
-exports.testdir		= testdirpath;
-exports.assert		= chai.assert;
-exports.expect		= chai.expect;
+register(new URL('../node_modules/ts-node/esm.mjs', import.meta.url), pathToFileURL('./'));
 
 /*
  * Local variables:

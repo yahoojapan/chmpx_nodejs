@@ -24,7 +24,8 @@
 //-------------------------------------------------------------------
 // Requires
 //
-var chmpxnode = require('chmpx');
+import * as path from 'path';
+import ChmpxNode from 'chmpx';
 
 //-------------------------------------------------------------------
 // Common function
@@ -32,25 +33,25 @@ var chmpxnode = require('chmpx');
 // [NOTE]
 // This sleep is high load average, but this script is only test.
 //
-function sleep(milliseconds)
+const sleep = (milliseconds: number): void => 
 {
-	var start = new Date().getTime();
+	const start = Date.now();
 	while(true){
-		if ((new Date().getTime() - start) > milliseconds){
+		if(Date.now() - start > milliseconds){
 			break;
 		}
 	}
-}
+};
 
 //
 // Send and Receive
 //
-function sendReceive(msgid, data, timeout_ms, bcast)
+const sendReceive = (msgid: Buffer, data: Buffer, timeout_ms: number, bcast: boolean): boolean => 
 {
-	var timeout_val	= (0 != timeout_ms)	? timeout_ms	: 1000;
-	var method		= (true === bcast)	? 'Broadcast'	: 'Send';
-	var result;
+	const	timeout_val: number	= (0 !== timeout_ms)? timeout_ms	: 1000;
+	const	method: string		= (true === bcast)	? 'Broadcast'	: 'Send';
 
+	let	result: number = -1;
 	if(true === bcast){
 		result = chmpxslaveobj.broadcast(msgid, data);
 	}else{
@@ -58,32 +59,36 @@ function sendReceive(msgid, data, timeout_ms, bcast)
 	}
 	console.log('<--- %s(%s(hex)) : %s', method, msgid.toString('hex'), result);
 
-	if(-1 == result){
+	if(-1 === result){
 		console.log('[ERROR] %s Receive : [msgid:%s][data:%s][timeout:%dms][%s], Result : false', method, msgid.toString('hex'), data.toString('hex'), timeout_ms, bcast);
 		return false;
 	}
 
-	var bufarr = new Array();
-	result = chmpxslaveobj.receive(msgid, bufarr, timeout_val);
+	const bufarr: [Buffer?, Buffer?] = [];
+	const result2: boolean = chmpxslaveobj.receive(msgid, (bufarr as [Buffer?, Buffer?]), timeout_val);
 
-	console.log('---> Receive(%s(hex)) : %s', msgid.toString('hex'), result);
+	console.log('---> Receive(%s(hex)) : %s', msgid.toString('hex'), result2);
 	console.log('     buf array length = ' + bufarr.length);
 
 	if(2 <= bufarr.length){
-		console.log('     buf[0] = %s(hex)',		bufarr[0].toString('hex'));
-		console.log('     buf[1] = \"%s\"(utf8)',	bufarr[1].toString());
-		console.log('     buf[1] = %s(hex)',		bufarr[1].toString('hex'));
+		console.log('     buf[0] = %s(hex)',		(bufarr[0] as Buffer).toString('hex'));
+		console.log('     buf[1] = \"%s\"(utf8)',	(bufarr[1] as Buffer).toString());
+		console.log('     buf[1] = %s(hex)',		(bufarr[1] as Buffer).toString('hex'));
 	}else{
 		return false;
 	}
 	console.log();
 	return true;
-}
+};
 
 //-------------------------------------------------------------------
 // Run chmpx nodejs for slave process
 //
-var chmpxslaveobj = new chmpxnode();
+// [NOTE]
+// The reason for defining it with let instead of const is to reset
+// undefined to force GC to run at the end of the file.
+//
+let chmpxslaveobj: chmpx.ChmpxNode = ChmpxNode();
 
 if(!chmpxslaveobj.initializeOnSlave('chmpx_slave.ini', true)){
 	console.log('[ERROR] Failed to inisialize chmpx nodejs on slave node, get false from InitializeOnSlave');
@@ -93,8 +98,8 @@ if(!chmpxslaveobj.initializeOnSlave('chmpx_slave.ini', true)){
 //
 // Open msgid for slave process
 //
-var msgid1 = chmpxslaveobj.open();
-var msgid2 = chmpxslaveobj.open();
+const msgid1: Buffer = chmpxslaveobj.open();
+const msgid2: Buffer = chmpxslaveobj.open();
 console.log('-> Open(msgid1): %s', msgid1.toString('hex'));
 console.log('-> Open(msgid2): %s', msgid2.toString('hex'));
 
@@ -108,16 +113,13 @@ if(false === chmpxslaveobj.close(msgid1)){
 	process.exit(1);
 }
 
-var result = sendReceive(msgid1, Buffer.from('msgid1: after Close()'), 1000, false);
+const result: boolean = sendReceive(msgid1, Buffer.from('msgid1: after Close()'), 1000, false);
 console.log('<- SendAfterClose(%s(hex)) : %s', msgid1.toString('hex'), result);
 
 //
 // Stop receiving server process
 //
 sendReceive(msgid2, Buffer.from('BREAK TEST'), 1000, false);			// for stop server process
-
-delete chmpxslaveobj;
-chmpxslaveobj = null;
 
 process.exit(0);
 

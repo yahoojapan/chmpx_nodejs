@@ -25,7 +25,6 @@
 #include <fullock/flckbaselist.tcc>
 #include "chmpx_cbs.h"
 
-using namespace v8;
 using namespace std;
 using namespace fullock;
 
@@ -43,68 +42,55 @@ StackEmitCB::~StackEmitCB()
 	flck_unlock_noshared_mutex(&lockval);			// UNLOCK
 }
 
-// [NOTE]
-// This method does not lock, thus must lock before calling this.
-//
-Nan::Callback* StackEmitCB::RawFind(const char* pemitname)
-{
-	string			stremit	= pemitname ? pemitname : "";
-	Nan::Callback*	cbfunc	= NULL;
-	if(stremit.empty()){
-		return cbfunc;
-	}
-	if(EmitCbsMap.end() != EmitCbsMap.find(stremit)){
-		cbfunc = EmitCbsMap[stremit];
-	}
-	return cbfunc;
-}
-
-Nan::Callback* StackEmitCB::Find(const char* pemitname)
+bool StackEmitCB::Set(const std::string& emitter, const Napi::Function& cb)
 {
 	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
-	Nan::Callback*	cbfunc = RawFind(pemitname);
-	flck_unlock_noshared_mutex(&lockval);			// UNLOCK
 
-	return cbfunc;
-}
-
-bool StackEmitCB::Set(const char* pemitname, Nan::Callback* cbfunc)
-{
-	string	stremit = pemitname ? pemitname : "";
-	if(stremit.empty()){
-		return false;
+	// clear if existed
+	auto it = EmitCbsMap.find(emitter);
+	if(EmitCbsMap.end() != it){
+		it->second.Reset();
+		EmitCbsMap.erase(it);
 	}
 
-	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
+	// Insert new persistent reference
+	Napi::FunctionReference ref = Napi::Persistent(cb);
+	EmitCbsMap.emplace(emitter, std::move(ref));
 
-	const Nan::Callback*	oldcbfunc = RawFind(pemitname);
-	if(oldcbfunc){
-		EmitCbsMap.erase(stremit);
-	}
-	if(cbfunc){
-		EmitCbsMap[stremit] = cbfunc;
-	}
 	flck_unlock_noshared_mutex(&lockval);			// UNLOCK
 
 	return true;
 }
 
-bool StackEmitCB::Unset(const char* pemitname)
+bool StackEmitCB::Unset(const std::string& emitter)
 {
-	string	stremit = pemitname ? pemitname : "";
-	if(stremit.empty()){
-		return false;
-	}
-
 	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
 
-	const Nan::Callback*	oldcbfunc = RawFind(pemitname);
-	if(oldcbfunc){
-		EmitCbsMap.erase(stremit);
+	auto it = EmitCbsMap.find(emitter);
+	if(EmitCbsMap.end() == it){
+		flck_unlock_noshared_mutex(&lockval);		// UNLOCK
+		return false;
 	}
+	it->second.Reset();
+	EmitCbsMap.erase(it);
+
 	flck_unlock_noshared_mutex(&lockval);			// UNLOCK
 
 	return true;
+}
+
+Napi::FunctionReference* StackEmitCB::Find(const std::string& emitter)
+{
+	while(!flck_trylock_noshared_mutex(&lockval));	// LOCK
+
+	auto it = EmitCbsMap.find(emitter);
+	if(EmitCbsMap.end() == it){
+		flck_unlock_noshared_mutex(&lockval);		// UNLOCK
+		return nullptr;
+	}
+	flck_unlock_noshared_mutex(&lockval);			// UNLOCK
+
+	return &it->second;
 }
 
 /*

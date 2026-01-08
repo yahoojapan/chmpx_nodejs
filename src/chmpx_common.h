@@ -27,13 +27,11 @@
 //---------------------------------------------------------
 // common headers
 //---------------------------------------------------------
-#include <node.h>
 #include <chmpx/chmcntrl.h>
 #include <chmpx/chmkvp.h>
 #include <chmpx/chmpx.h>
 
-#include <nan.h>
-
+#include <napi.h>
 #include <string>
 #include <iostream>
 #include <map>
