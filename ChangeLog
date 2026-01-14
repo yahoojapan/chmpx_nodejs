@@ -1,3 +1,9 @@
+chmpx (2.0.0) unstable; urgency=low
+
+  * Updated to N-API base and Changed packaging and Supported TS/ESM - #53
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Wed, 14 Jan 2026 16:23:41 +0900
+
 chmpx (1.0.23) unstable; urgency=low
 
   * Updated a dependent package version(mocha) - #51
