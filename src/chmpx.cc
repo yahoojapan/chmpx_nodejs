@@ -21,25 +21,39 @@
  *
  */
 
+#include <napi.h>
 #include "chmpx_node.h"
-
-using namespace v8;
 
 //---------------------------------------------------------
 // chmpx node object
 //---------------------------------------------------------
-NAN_METHOD(CreateObject)
+// [NOTE]
+// The logic for receiving arguments when switching to N-API has been removed.
+// This is because the arguments were not used in the first place and did not
+// need to be defined.
+//
+Napi::Value CreateObject(const Napi::CallbackInfo& info)
 {
-	ChmpxNode::NewInstance(info);
+	Napi::Env env = info.Env();
+	return ChmpxNode::NewInstance(env);	// always no arguments.
 }
 
-void InitAll(Local<Object> exports, Local<Object> module)
+Napi::Object InitAll(Napi::Env env, Napi::Object exports)
 {
-	ChmpxNode::Init();
-	Nan::Set(module, Nan::New("exports").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(CreateObject)).ToLocalChecked());
+	// Class registration (creating a constructor)
+	ChmpxNode::Init(env, exports);
+
+	// Create a factory function that returns module.exports
+	Napi::Function createFn = Napi::Function::New(env, CreateObject, "chmpx");
+
+	// Allow to use "require('chmpx').ChmpxNode"
+	createFn.Set("ChmpxNode", ChmpxNode::constructor.Value());
+
+	// Replace module.exports with this function (does not break existing "require('chmpx')()".)
+	return createFn;
 }
 
-NODE_MODULE(chmpx, InitAll)
+NODE_API_MODULE(chmpx, InitAll)
 
 /*
  * Local variables:

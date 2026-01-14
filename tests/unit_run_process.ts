@@ -21,29 +21,38 @@
  *
  */
 
-'use strict';
-
 //
 // Common Start/Stop sub-processes for before/after in mocha
 //
-var	execSync = require('child_process').execSync;			// For before section to launching sub processes
+import { execSync } from 'child_process';		// For before section to launching sub processes
+
+// [NOTE]
+// If this file has included the @types/mocha, we should use the
+// "Mocha.Context" type, but here we will only deal with the timeout
+// attribute of Mocha.Context and will not be aware of Mocha.Context.
+// Therefore, we will use a type declaration for only the timeout
+// attribute.
+//
+export type ParentWithTimeout = {
+	timeout: (ms?: number) => number;
+};
 
 //
 // Before : Start sub processes(server chmpx/slave chmpx/server node) for slave test
 //
-exports.startServer = function(parentobj, testdir)
+export const startServer = (parentobj: ParentWithTimeout, testdir: string): void =>
 {
 	console.log('        START SUB PROCESSES FOR TESTING SLAVE:');
 
 	//
 	// Change timeout for running sub-processes
 	//
-	var	orgTimeout = parentobj.timeout(30000);
+	const orgTimeout = parentobj.timeout(30000);
 
 	//
 	// Run server chmpx for server node
 	//
-	var	result = execSync(testdir + '/run_process_helper.sh start_chmpx_server');
+	let	result = execSync(testdir + '/run_process_helper.sh start_chmpx_server');
 	console.log('          -> ' + String(result).replace(/\r?\n$/g, ''));
 
 	//
@@ -68,19 +77,19 @@ exports.startServer = function(parentobj, testdir)
 //
 // Before : Start sub processes(server chmpx/slave chmpx) for server test
 //
-exports.startSlaveChmpx = function(parentobj, testdir)
+export const startSlaveChmpx = (parentobj: ParentWithTimeout, testdir: string): void =>
 {
 	console.log('        START SUB PROCESSES(CHMPX) FOR TESTING SERVER:');
 
 	//
 	// Change timeout for running sub-processes
 	//
-	var	orgTimeout = parentobj.timeout(30000);
+	const orgTimeout = parentobj.timeout(30000);
 
 	//
 	// Run server chmpx for server node
 	//
-	var	result = execSync(testdir + '/run_process_helper.sh start_chmpx_server');
+	let	result = execSync(testdir + '/run_process_helper.sh start_chmpx_server');
 	console.log('          -> ' + String(result).replace(/\r?\n$/g, ''));
 
 	//
@@ -96,11 +105,10 @@ exports.startSlaveChmpx = function(parentobj, testdir)
 	parentobj.timeout(orgTimeout);
 };
 
-
 //
 // Before : Start sub processes(slave node) for server test
 //
-exports.startSlaveNode = function(parentobj, testdir)
+export const startSlaveNode = (parentobj: ParentWithTimeout, testdir: string): void =>
 {
 	console.log('');
 	console.log('        START SUB PROCESSES(SLAVE NODE) FOR TESTING SERVER:');
@@ -108,12 +116,12 @@ exports.startSlaveNode = function(parentobj, testdir)
 	//
 	// Change timeout for running sub-processes
 	//
-	var	orgTimeout = parentobj.timeout(30000);
+	const orgTimeout = parentobj.timeout(30000);
 
 	//
 	// Run slave node process
 	//
-	var result = execSync(testdir + '/run_process_helper.sh start_node_slave');
+	const result = execSync(testdir + '/run_process_helper.sh start_node_slave');
 	console.log('          -> ' + String(result).replace(/\r?\n$/g, ''));
 	console.log('');
 
@@ -126,7 +134,7 @@ exports.startSlaveNode = function(parentobj, testdir)
 //
 // After : Stop all sub processes
 //
-exports.stop = function(parentobj, testdir)
+export const stopProcs = (parentobj: ParentWithTimeout, testdir: string): void =>
 {
 	console.log('');
 	console.log('        STOP ALL SUB PROCESSES:');
@@ -134,12 +142,12 @@ exports.stop = function(parentobj, testdir)
 	//
 	// Change timeout for running sub-processes
 	//
-	var	orgTimeout = parentobj.timeout(30000);
+	const orgTimeout = parentobj.timeout(30000);
 
 	//
 	// Stop all sub processes
 	//
-	var	result = execSync(testdir + '/run_process_helper.sh stop_all');
+	const	result = execSync(testdir + '/run_process_helper.sh stop_all');
 	console.log('          -> ' + String(result).replace(/\r?\n$/g, ''));
 	console.log('');
 

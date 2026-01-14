@@ -34,20 +34,43 @@ LICENSE
 *.yaml
 *.yml
 .publishrc
+*.org
 
 ### Directories
 .github/
 package/
 buildutils/
+utils/
 test/
-test*/
+tests/
+tests_cjs/
+
+### Exclude build intermediate/output that is not needed for source rebuild
+build/Release/obj.target/
+build/Release/.deps/
+build/Release/**/*.o
+build/Release/**/*.d
+build/**/obj.target/
+build/**/.deps/
+build/**/*.o
+build/**/*.d
+build/*.mk
+build/*target.mk
 
 ### Generated
-build/
-src/build/
 artifacts
+npm-debug.log
 *.log
 *.xml
+.DS_Store
+.git
+.gitignore
+.vscode/
+
+### Except files
+!buildutils/make_node_prebuild_variables.sh
+!buildutils/node_prebuild_install.sh
+!buildutils/node_prebuild.sh
 
 #
 # Local variables:

@@ -16,17 +16,40 @@
  * the license file that was distributed with this source code.
  *
  * AUTHOR:   Takeshi Nakatani
- * CREATE:   Thu Nov 8 2018
+ * CREATE:   Wed Jan 7 2026
  * REVISION:
  *
  */
 
-'use strict';
+import resolve	from '@rollup/plugin-node-resolve';
+import commonjs	from '@rollup/plugin-commonjs';
+import terser	from '@rollup/plugin-terser';
+import replace	from '@rollup/plugin-replace';
 
-//
-// Thin CommonJS re-export to built CJS artifact (safe for existing users)
-//
-module.exports = require('./build/cjs/index.js');
+export default
+{
+	input:	'build/esm/index.js',
+	output: {
+		file:		'build/esm/index.mjs',
+		format:		'es',
+		sourcemap:	true
+	},
+	plugins: [
+		resolve({
+			preferBuiltins: true
+		}),
+		commonjs(),
+		replace({
+			'process.env.NODE_ENV':	JSON.stringify(process.env.NODE_ENV || 'production'),
+			preventAssignment:		true
+		}),
+		terser()
+	],
+	external: [
+		'bindings',
+		'node-addon-api'
+	]
+};
 
 /*
  * Local variables:

@@ -30,52 +30,59 @@
 //---------------------------------------------------------
 // ChmpxNode Class
 //---------------------------------------------------------
-class ChmpxNode : public Nan::ObjectWrap
+class ChmpxNode : public Napi::ObjectWrap<ChmpxNode>
 {
 	public:
-		static void	Init(void);
-		static NAN_METHOD(NewInstance);
-		static v8::Local<v8::Object> GetInstance(Nan::NAN_METHOD_ARGS_TYPE info);
+		static void Init(Napi::Env env, Napi::Object exports);
+		static Napi::Object NewInstance(Napi::Env env);
+		static Napi::Object NewInstance(Napi::Env env, const Napi::Value& arg);
+
+		static Napi::Object GetInstance(const Napi::CallbackInfo& info);
+
+		// Constructor / Destructor
+		explicit ChmpxNode(const Napi::CallbackInfo& info);
+		~ChmpxNode();
 
 	private:
-		ChmpxNode(void);
-		~ChmpxNode(void);
+		Napi::Value New(const Napi::CallbackInfo& info);
 
-		static NAN_METHOD(New);
+		Napi::Value On(const Napi::CallbackInfo& info);
+		Napi::Value OnInitializeOnServer(const Napi::CallbackInfo& info);
+		Napi::Value OnInitializeOnSlave(const Napi::CallbackInfo& info);
+		Napi::Value OnOpen(const Napi::CallbackInfo& info);
+		Napi::Value OnClose(const Napi::CallbackInfo& info);
+		Napi::Value OnSend(const Napi::CallbackInfo& info);
+		Napi::Value OnBroadcast(const Napi::CallbackInfo& info);
+		Napi::Value OnReply(const Napi::CallbackInfo& info);
+		Napi::Value OnReceive(const Napi::CallbackInfo& info);
+		Napi::Value Off(const Napi::CallbackInfo& info);
+		Napi::Value OffInitializeOnServer(const Napi::CallbackInfo& info);
+		Napi::Value OffInitializeOnSlave(const Napi::CallbackInfo& info);
+		Napi::Value OffOpen(const Napi::CallbackInfo& info);
+		Napi::Value OffClose(const Napi::CallbackInfo& info);
+		Napi::Value OffSend(const Napi::CallbackInfo& info);
+		Napi::Value OffBroadcast(const Napi::CallbackInfo& info);
+		Napi::Value OffReply(const Napi::CallbackInfo& info);
+		Napi::Value OffReceive(const Napi::CallbackInfo& info);
 
-		static NAN_METHOD(On);
-		static NAN_METHOD(OnInitializeOnServer);
-		static NAN_METHOD(OnInitializeOnSlave);
-		static NAN_METHOD(OnOpen);
-		static NAN_METHOD(OnClose);
-		static NAN_METHOD(OnSend);
-		static NAN_METHOD(OnBroadcast);
-		static NAN_METHOD(OnReply);
-		static NAN_METHOD(OnReceive);
-		static NAN_METHOD(Off);
-		static NAN_METHOD(OffInitializeOnServer);
-		static NAN_METHOD(OffInitializeOnSlave);
-		static NAN_METHOD(OffOpen);
-		static NAN_METHOD(OffClose);
-		static NAN_METHOD(OffSend);
-		static NAN_METHOD(OffBroadcast);
-		static NAN_METHOD(OffReply);
-		static NAN_METHOD(OffReceive);
+		Napi::Value InitializeOnServer(const Napi::CallbackInfo& info);
+		Napi::Value InitializeOnSlave(const Napi::CallbackInfo& info);
+		Napi::Value Send(const Napi::CallbackInfo& info);
+		Napi::Value Broadcast(const Napi::CallbackInfo& info);
+		Napi::Value Receive(const Napi::CallbackInfo& info);
+		Napi::Value Reply(const Napi::CallbackInfo& info);
+		Napi::Value Open(const Napi::CallbackInfo& info);
+		Napi::Value Close(const Napi::CallbackInfo& info);
+		Napi::Value IsChmpxExit(const Napi::CallbackInfo& info);
 
-		static NAN_METHOD(InitializeOnServer);
-		static NAN_METHOD(InitializeOnSlave);
-		static NAN_METHOD(Send);
-		static NAN_METHOD(Broadcast);
-		static NAN_METHOD(Receive);
-		static NAN_METHOD(Reply);
-		static NAN_METHOD(Open);
-		static NAN_METHOD(Close);
-		static NAN_METHOD(IsChmpxExit);
+	public:
+		// constructor reference
+		static Napi::FunctionReference	constructor;
+
+		StackEmitCB	_cbs;
 
 	private:
-		static Nan::Persistent<v8::Function>	constructor;
-		ChmCntrl								_chmcntrl;
-		StackEmitCB								_cbs;
+		ChmCntrl	_chmcntrl;
 };
 
 #endif

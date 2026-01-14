@@ -24,20 +24,22 @@
 //-------------------------------------------------------------------
 // Requires
 //
-var chmpxnode = require('chmpx');
+import * as path from 'path';
+import ChmpxNode from 'chmpx';
 
 //-------------------------------------------------------------------
 // Environment
 //
-var	ini_file_path = "chmpx_server.ini";
-if(process.env.TESTDIR_PATH != undefined){
-	ini_file_path = process.env.TESTDIR_PATH + "/chmpx_server.ini";
-}
+const ini_file_path: string = (undefined !== process.env.TESTS_PATH) ? path.join(process.env.TESTS_PATH, "chmpx_server.ini") : "chmpx_server.ini";
 
 //-------------------------------------------------------------------
 // Run chmpx nodejs for server process
 //
-var chmpxserverobj = new chmpxnode();
+// [NOTE]
+// The reason for defining it with let instead of const is to reset
+// undefined to force GC to run at the end of the file.
+//
+let chmpxserverobj: chmpx.ChmpxNode = ChmpxNode();
 
 console.log('* TEST : class object type         = %s', chmpxserverobj);
 console.log('* TEST : IsChmpxExit(expect false) = %s', chmpxserverobj.isChmpxExit());
@@ -53,33 +55,31 @@ if(!chmpxserverobj.initializeOnServer(ini_file_path, true)){
 console.log('* TEST : Loop for recieving data');
 
 while(true){
-	var outarr = new Array();
+    // Array passed in will be filled by native addon: [compkt, body]
+    const outarr: [Buffer?, Buffer?] = [];
 
-	if(!chmpxserverobj.receive(outarr, -1)){								// wait
+	if(!chmpxserverobj.receive((outarr as [Buffer?, Buffer?]), -1)){			// wait
 		console.log("[ERROR] failed to receive data on server process.");
 		process.exit(1);
 	}
 
-	if(0 == outarr[1].length){
+	const body = outarr[1];
+	if(!body || 0 === body.length){
 		continue;
 	}
 
-	var receive_str = outarr[1].toString();
+    const receive_str = body.toString();
 	console.log("-->Receive = \"%s\"(utf8)",	receive_str);
-	console.log("-->Receive = %s(hex)",			outarr[1].toString('hex'));
+	console.log("-->Receive = %s(hex)",			(outarr[1] as Buffer).toString('hex'));
 
 	if(receive_str == "BREAK TEST"){
 		break;
 	}
-	var replydata = Buffer.from('Reply(' + receive_str + ')');
-
-	result = chmpxserverobj.reply(outarr[0], replydata);
+    const replydata	= Buffer.from('Reply(' + receive_str + ')');
+    const result	= chmpxserverobj.reply((outarr[0] as Buffer), replydata);
 
 	console.log("<--Reply = \"%s\" : %s", 		replydata, result);
 }
-
-delete chmpxserverobj;
-chmpxserverobj = null;
 
 process.exit(0);
 

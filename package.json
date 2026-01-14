@@ -4,30 +4,75 @@
   "description": "CHMPX addon library for Node.js",
   "os": "linux",
   "main": "index.js",
+  "module": "index.mjs",
+  "types": "types/index.d.ts",
   "directories": {
-    "test": "test"
+    "test": "tests"
   },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "binding.gyp",
+    "types",
+    "src",
+    "build/cjs/index.js",
+    "build/esm/index.js",
+    "build/Assets/*.tar.gz",
+    "buildutils/make_node_prebuild_variables.sh",
+    "buildutils/node_prebuild_install.sh",
+    "buildutils/node_prebuild.sh",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "bindings": "^1.5.0",
-    "nan": "^2.22.0"
+    "node-addon-api": "^8.5.0",
+    "prebuild-install": "^7.1.3"
   },
   "devDependencies": {
-    "chai": "^4.5.0",
-    "mocha": "^11.1.0"
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-replace": "^6.0.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.0.8",
+    "chai": "^6.2.2",
+    "mocha": "^11.7.5",
+    "node-gyp": "^12.1.0",
+    "prebuild": "^13.0.1",
+    "rollup": "^4.55.1",
+    "typescript": "^5.9.3",
+    "ts-node": "^10.9.2"
   },
   "scripts": {
-    "build": "npm run build:before && npm run build:configure && npm run build:rebuild && npm run build:linkdir && npm run build:after",
-    "build:before": "echo \"Build - Start\"",
-    "build:configure": "if [ -f src/binding.gyp ]; then cd src; fi && node-gyp configure --verbose --release --target_arch=x64 --coverage=true",
-    "build:rebuild": "if [ -f src/binding.gyp ]; then cd src; fi && node-gyp rebuild --verbose --release --target_arch=x64 --coverage=true",
-    "build:linkdir": "if [ ! -f build -a ! -s build ]; then ln -s src/build .; fi",
-    "build:after": "echo \"Build - Succeed\"",
-    "install": "npm run build",
-    "test": "npm run test:all",
-    "test:all": "npm run test:chmpx",
-    "test:chmpx": "echo \"Test - All\" && tests/test.sh && echo \"Finished\"",
-    "test:chmpx:slave": "echo \"Test - chmpx slave\" && tests/test.sh chmpx_slave && echo \"Finished\"",
-    "test:chmpx:server": "echo \"Test - chmpx server\" && tests/test.sh chmpx_server && echo \"Finished\""
+    "help": "echo 'command list:\n    npm run install\n    npm run install:onlypackages\n    npm run build\n    npm run build:ts\n    npm run build:ts:cjs\n    npm run build:ts:esm\n    npm run build:ts:tests:cjs\n    npm run build:types\n    npm run build:checktypes\n    npm run build:configure\n    npm run build:rebuild\n    npm run build:prebuild\n    npm run build:prebuild:pure\n    npm run build:bundle:esm\n    npm run prepublishOnly\n    npm run lint\n    npm run test\n    npm run test:ci\n    npm run test:all\n    npm run test:smoke\n    npm run test:smoke:cjs\n    npm run test:smoke:esm\n    npm run test:smoke:ts\n    npm run test:chmpx\n    npm run test:chmpx:slave\n    npm run test:chmpx:server\n'",
+    "install": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Install' && ./buildutils/node_prebuild_install.sh || (echo '[INFO] No binaries found, so building from source\n' && if [ -d build/cjs ] && [ -d build/esm ]; then npm run build:rebuild; else npm run build; fi) && echo '-> [DONE] Install\n'",
+    "install:onlypackages": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Install:onlypackages' && npm install --ignore-scripts && echo '-> [DONE] Install:onlypackages\n'",
+    "build": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build' && npm run build:checktypes && npm run build:configure && npm run build:rebuild && npm run build:ts && echo '-> [DONE] Build\n'",
+    "build:ts": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:ts' && npm run build:ts:cjs && npm run build:ts:esm && echo '-> [DONE] Build:ts\n'",
+    "build:ts:cjs": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:ts:cjs' && tsc -p tsconfig.cjs.json && echo '-> [DONE] Build:ts:cjs\n'",
+    "build:ts:esm": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:ts:esm' && tsc -p tsconfig.esm.json && echo '-> [DONE] Build:ts:esm\n'",
+    "build:ts:tests:cjs": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:ts:tests:cjs' && tsc -p tsconfig.tests.json && echo '-> [DONE] Build:ts:tests:cjs\n'",
+    "build:types": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:types' && echo '[NOTICE] We already provide index.d.ts manually, so NOT need to build types.(if run, index.d.ts is generated in \"types-generated\", but NOT use it.)' && tsc -p tsconfig.types.json && echo '-> [DONE] Build:types\n'",
+    "build:checktypes": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:checktypes' && tsc --noEmit -p tsconfig.types.json && echo '-> [DONE] Build:checktypes\n'",
+    "build:configure": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:configure' && if [ -f binding.gyp ]; then (node-gyp configure --verbose --release --target_arch=$(uname -m | sed 's/x86_64/x64/')); else echo '[WARNING] No binding.gyp, skipping configure'; fi && echo '-> [DONE] Build:configure\n'",
+    "build:rebuild": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:rebuild' && if [ -f binding.gyp ]; then (node-gyp rebuild --verbose --release --target_arch=$(uname -m | sed 's/x86_64/x64/')); else echo '[WARNING] No binding.gyp, skipping rebuild'; fi && echo '-> [DONE] Build:rebuild\n'",
+    "build:prebuild": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:prebuild' && ./buildutils/node_prebuild.sh && echo '-> [DONE] Build:prebuild\n'",
+    "build:prebuild:pure": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:prebuild:pure (for only prebuild confirmation)' && GYP_DEFINES=openssl_fips= prebuild --strip --napi --path prebuilds && echo '-> [DONE] Build:prebuild:pure\n'",
+    "build:bundle:esm": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Build:bundle:esm' && echo '[NOTICE] Currently, rollup is NOT necessary, Does NOT use those outputed files, so do NOT run before packaging.' && rollup -c rollup.config.mjs && echo '-> [DONE] Build:bundle:esm\n'",
+    "prepublishOnly": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] PrepublishOnly' && echo '[INFO] Currently, no implementation. If there are signatures and final inspections, etc., the processing will be implemented here.' && echo '-> [DONE] PrepublishOnly\n'",
+    "lint": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Lint' && echo '[INFO] No linter configured' && echo '-> [DONE] Lint\n'",
+    "test": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test' && if [ ! -f build/cjs/index.js ]; then npm run build || exit 1; fi && npm run test:all && echo '-> [DONE] Test\n'",
+    "test:ci": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:ci' && if [ ! -f build/cjs/index.js ]; then echo '[ERROR] Not found build/cjs/index.js (build missing)'; exit 1; fi && npm run test:all && echo '-> [DONE] Test:ci\n'",
+    "test:all": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:all' && npm run test:smoke && npm run test:chmpx && echo '-> [DONE] Test:all\n'",
+    "test:smoke": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke' && npm run test:smoke:cjs && npm run test:smoke:esm && npm run test:smoke:ts && echo '-> [DONE] Test:smoke\n'",
+    "test:smoke:cjs": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:cjs' && node tests/smoke_test_cjs.js && echo '-> [DONE] Test:smoke:cjs\n'",
+    "test:smoke:esm": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:esm' && node tests/smoke_test_esm.mjs && echo '-> [DONE] Test:smoke:esm\n'",
+    "test:smoke:ts": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:ts' && tsc --noEmit tests/smoke_test_ts.ts && echo '-> [DONE] Test:smoke:ts\n'",
+    "test:chmpx": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx' && npm run test:chmpx:slave && npm run test:chmpx:server && echo '-> [DONE] Test:chmpx\n'",
+    "test:chmpx:slave": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx:slave' && tests/test.sh chmpx_slave && echo '-> [DONE] Test:chmpx:slave\n'",
+    "test:chmpx:server": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx:server' && tests/test.sh chmpx_server && echo '-> [DONE] Test:chmpx:server\n'"
   },
   "repository": {
     "type": "git",
@@ -46,15 +91,27 @@
     "consistent",
     "inprocess-data-exchange",
     "autoscaling",
-    "multiplex"
+    "multiplex",
+    "n-api",
+    "native",
+    "addon"
   ],
   "bugs": {
     "url": "http://github.com/yahoojapan/chmpx_nodejs/issues",
-    "email": "antpickax-support@mail.yahoo.co.jp"
+    "email": "ml-antpickax-support@lycorp.co.jp"
   },
   "author": "Takeshi Nakatani <ggtakec@gmail.com> (https://github.com/ggtakec)",
   "contributors": [
     "Hirotaka Wakabayashi <hiwakaba@lycorp.co.jp> (https://github.com/hiwakaba)"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./index.js"
+    }
+  },
+  "engines": {
+    "node": ">=14"
+  }
 }

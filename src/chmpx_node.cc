@@ -24,7 +24,6 @@
 #include "chmpx_node.h"
 #include "chmpx_node_async.h"
 
-using namespace v8;
 using namespace std;
 
 //---------------------------------------------------------
@@ -54,49 +53,94 @@ const char*	stc_emitters[] = {
 inline const char* GetNormalizationEmitter(const char* emitter)
 {
 	if(!emitter){
-		return NULL;
+		return nullptr;
 	}
 	for(const char** ptmp = &stc_emitters[0]; ptmp && *ptmp; ++ptmp){
 		if(0 == strcasecmp(*ptmp, emitter)){
 			return *ptmp;
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 //---------------------------------------------------------
-// Utility macros
+// Utility (using StackEmitCB Class)
 //---------------------------------------------------------
-#define	SetChmpxNodeCallback(info, pos, pemitter) \
-		{ \
-			ChmpxNode*	obj = Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This()); \
-			if(info.Length() <= pos){ \
-				Nan::ThrowSyntaxError("No callback is specified."); \
-				return; \
-			} \
-			Nan::Callback* cb = new Nan::Callback(); \
-			cb->SetFunction(info[pos].As<v8::Function>()); \
-			bool	result = obj->_cbs.Set(pemitter, cb); \
-			info.GetReturnValue().Set(Nan::New(result)); \
-		}
+static Napi::Value SetChmpxNodeCallback(const Napi::CallbackInfo& info, size_t pos, const char* pemitter)
+{
+	Napi::Env env = info.Env();
 
-#define	UnsetChmpxNodeCallback(info, pemitter) \
-		{ \
-			ChmpxNode*	obj		= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This()); \
-			bool		result	= obj->_cbs.Unset(pemitter); \
-			info.GetReturnValue().Set(Nan::New(result)); \
-		}
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode* obj = Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// check parameter
+	if(info.Length() <= pos){
+		Napi::TypeError::New(env, "No callback is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	if(!info[pos].IsFunction()){
+		Napi::TypeError::New(env, "The parameter is not callback function.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Function cb = info[pos].As<Napi::Function>();
+
+	// set
+	bool result = obj->_cbs.Set(std::string(pemitter), cb);
+	return Napi::Boolean::New(env, result);
+}
+
+static Napi::Value UnsetChmpxNodeCallback(const Napi::CallbackInfo& info, const char* pemitter)
+{
+	Napi::Env env = info.Env();
+
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode* obj = Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// unset
+	bool result = obj->_cbs.Unset(std::string(pemitter));
+	return Napi::Boolean::New(env, result);
+}
 
 //---------------------------------------------------------
 // ChmpxNode Class
 //---------------------------------------------------------
-Nan::Persistent<Function>	ChmpxNode::constructor;
+Napi::FunctionReference	ChmpxNode::constructor;
 
 //---------------------------------------------------------
 // ChmpxNode Methods
 //---------------------------------------------------------
-ChmpxNode::ChmpxNode() : _chmcntrl(), _cbs()
+ChmpxNode::ChmpxNode(const Napi::CallbackInfo& info) : Napi::ObjectWrap<ChmpxNode>(info), _cbs(), _chmcntrl()
 {
+	// [NOTE]
+	// Perhaps due to an initialization order issue, these
+	// chmpx debug environment variable settings don't work.
+	// So, load the environment variables and set the debug
+	// mode/file settings here.
+	//
+	const char* chmpxdbgmode = std::getenv("CHMDBGMODE");
+	const char* chmpxdbgfile = std::getenv("CHMDBGFILE");
+	if(chmpxdbgmode && chmpxdbgfile){
+		if(0 == strcasecmp(chmpxdbgmode, "SLT") || 0 == strcasecmp(chmpxdbgmode, "SILENT")){
+			chmpx_set_debug_level_silent();
+		}else if(0 == strcasecmp(chmpxdbgmode, "ERR") || 0 == strcasecmp(chmpxdbgmode, "ERROR")){
+			chmpx_set_debug_level_error();
+		}else if(0 == strcasecmp(chmpxdbgmode, "WARNING") || 0 == strcasecmp(chmpxdbgmode, "WARN") || 0 == strcasecmp(chmpxdbgmode, "WAN")){
+			chmpx_set_debug_level_warning();
+		}else if(0 == strcasecmp(chmpxdbgmode, "INFO") || 0 == strcasecmp(chmpxdbgmode, "INF") || 0 == strcasecmp(chmpxdbgmode, "MSG")){
+			chmpx_set_debug_level_message();
+		}else if(0 == strcasecmp(chmpxdbgmode, "DUMP") || 0 == strcasecmp(chmpxdbgmode, "DMP")){
+			chmpx_set_debug_level_dump();
+		}
+		chmpx_set_debug_file(chmpxdbgfile);		// Ignore any errors that occur.
+	}
 }
 
 ChmpxNode::~ChmpxNode()
@@ -104,80 +148,88 @@ ChmpxNode::~ChmpxNode()
 	_chmcntrl.Clean();
 }
 
-void ChmpxNode::Init()
+void ChmpxNode::Init(Napi::Env env, Napi::Object exports)
 {
-	// Prepare constructor template
-	Local<FunctionTemplate>	tpl = Nan::New<FunctionTemplate>(New); 
-	tpl->SetClassName(Nan::New("ChmpxNode").ToLocalChecked()); 
-	tpl->InstanceTemplate()->SetInternalFieldCount(1); 
+	Napi::Function funcs = DefineClass(env, "ChmpxNode", {
+		// DefineClass normally handles the constructor internally. Therefore, there is no need
+		// to include a static wrapper New() in the class prototype, which works the same way as
+		// when using NAN.
+		// For reference, the following example shows how to declare New as a static method.
+		// (Registration is not normally required.)
+		//
+		//	ChmpxNode::InstanceMethod("new", 						&ChmpxNode::New),
 
-	Nan::SetPrototypeMethod(tpl, "on",						On);
-	Nan::SetPrototypeMethod(tpl, "onInitializeOnServer",	OnInitializeOnServer);
-	Nan::SetPrototypeMethod(tpl, "onInitializeOnSlave",		OnInitializeOnSlave);
-	Nan::SetPrototypeMethod(tpl, "onOpen",					OnOpen);
-	Nan::SetPrototypeMethod(tpl, "onClose",					OnClose);
-	Nan::SetPrototypeMethod(tpl, "onSend",					OnSend);
-	Nan::SetPrototypeMethod(tpl, "onBroadcast",				OnBroadcast);
-	Nan::SetPrototypeMethod(tpl, "onReply",					OnReply);
-	Nan::SetPrototypeMethod(tpl, "onReceive",				OnReceive);
-	Nan::SetPrototypeMethod(tpl, "off",						Off);
-	Nan::SetPrototypeMethod(tpl, "offInitializeOnServer",	OffInitializeOnServer);
-	Nan::SetPrototypeMethod(tpl, "offInitializeOnSlave",	OffInitializeOnSlave);
-	Nan::SetPrototypeMethod(tpl, "offOpen",					OffOpen);
-	Nan::SetPrototypeMethod(tpl, "offClose",				OffClose);
-	Nan::SetPrototypeMethod(tpl, "offSend",					OffSend);
-	Nan::SetPrototypeMethod(tpl, "offBroadcast",			OffBroadcast);
-	Nan::SetPrototypeMethod(tpl, "offReply",				OffReply);
-	Nan::SetPrototypeMethod(tpl, "offReceive",				OffReceive);
+		// Prototype for event emitter
+		ChmpxNode::InstanceMethod("on",						&ChmpxNode::On),
+		ChmpxNode::InstanceMethod("onInitializeOnServer",	&ChmpxNode::OnInitializeOnServer),
+		ChmpxNode::InstanceMethod("onInitializeOnSlave",	&ChmpxNode::OnInitializeOnSlave),
+		ChmpxNode::InstanceMethod("onOpen",					&ChmpxNode::OnOpen),
+		ChmpxNode::InstanceMethod("onClose",				&ChmpxNode::OnClose),
+		ChmpxNode::InstanceMethod("onSend",					&ChmpxNode::OnSend),
+		ChmpxNode::InstanceMethod("onBroadcast",			&ChmpxNode::OnBroadcast),
+		ChmpxNode::InstanceMethod("onReply",				&ChmpxNode::OnReply),
+		ChmpxNode::InstanceMethod("onReceive",				&ChmpxNode::OnReceive),
+		ChmpxNode::InstanceMethod("off",					&ChmpxNode::Off),
+		ChmpxNode::InstanceMethod("offInitializeOnServer",	&ChmpxNode::OffInitializeOnServer),
+		ChmpxNode::InstanceMethod("offInitializeOnSlave",	&ChmpxNode::OffInitializeOnSlave),
+		ChmpxNode::InstanceMethod("offOpen",				&ChmpxNode::OffOpen),
+		ChmpxNode::InstanceMethod("offClose",				&ChmpxNode::OffClose),
+		ChmpxNode::InstanceMethod("offSend",				&ChmpxNode::OffSend),
+		ChmpxNode::InstanceMethod("offBroadcast",			&ChmpxNode::OffBroadcast),
+		ChmpxNode::InstanceMethod("offReply",				&ChmpxNode::OffReply),
+		ChmpxNode::InstanceMethod("offReceive",				&ChmpxNode::OffReceive),
 
-	Nan::SetPrototypeMethod(tpl, "initializeOnServer",		InitializeOnServer);
-	Nan::SetPrototypeMethod(tpl, "initializeOnSlave",		InitializeOnSlave);
-	Nan::SetPrototypeMethod(tpl, "send",					Send);
-	Nan::SetPrototypeMethod(tpl, "broadcast",				Broadcast);
-	Nan::SetPrototypeMethod(tpl, "receive",					Receive);
-	Nan::SetPrototypeMethod(tpl, "reply",					Reply);
-	Nan::SetPrototypeMethod(tpl, "open",					Open);
-	Nan::SetPrototypeMethod(tpl, "close",					Close);
-	Nan::SetPrototypeMethod(tpl, "isChmpxExit",				IsChmpxExit);
+		// Prototype
+		ChmpxNode::InstanceMethod("initializeOnServer",		&ChmpxNode::InitializeOnServer),
+		ChmpxNode::InstanceMethod("initializeOnSlave",		&ChmpxNode::InitializeOnSlave),
+		ChmpxNode::InstanceMethod("send",					&ChmpxNode::Send),
+		ChmpxNode::InstanceMethod("broadcast",				&ChmpxNode::Broadcast),
+		ChmpxNode::InstanceMethod("receive",				&ChmpxNode::Receive),
+		ChmpxNode::InstanceMethod("reply",					&ChmpxNode::Reply),
+		ChmpxNode::InstanceMethod("open",					&ChmpxNode::Open),
+		ChmpxNode::InstanceMethod("close",					&ChmpxNode::Close),
+		ChmpxNode::InstanceMethod("isChmpxExit",			&ChmpxNode::IsChmpxExit)
+	});
 
-	// Reset
-	constructor.Reset(Nan::GetFunction(tpl).ToLocalChecked());
+	constructor = Napi::Persistent(funcs);
+	constructor.SuppressDestruct();
+
+	// [NOTE]
+	// do NOT do exports.Set("ChmpxNode", func) here if InitAll will return createFn.
+	//
 }
 
-NAN_METHOD(ChmpxNode::New)
+Napi::Value ChmpxNode::New(const Napi::CallbackInfo& info)
 {
-	if(info.IsConstructCall()){ 
+	if(info.IsConstructCall()){
 		// Invoked as constructor: new ChmpxNode()
-		ChmpxNode*	obj = new ChmpxNode();
-		obj->Wrap(info.This()); 
-		info.GetReturnValue().Set(info.This());
-	}else{ 
+		return info.This();
+	}else{
 		// Invoked as plain function ChmpxNode(), turn into construct call.
-		const unsigned	argc		= 1;
-		Local<Value>	argv[argc]	= {info[0]};
-		Local<Function>	cons		= Nan::New<Function>(constructor);
-		info.GetReturnValue().Set(Nan::NewInstance(cons, argc, argv).ToLocalChecked());
+		return constructor.New({});		// always no arguments
 	}
 }
 
-NAN_METHOD(ChmpxNode::NewInstance)
+// [NOTE]
+// The logic for receiving arguments when switching to N-API has been removed.
+// This is because the arguments were not used in the first place and did not
+// need to be defined.
+//
+// NewInstance( always no argments )
+Napi::Object ChmpxNode::NewInstance(Napi::Env env)
 {
-	const unsigned	argc		= 1;
-	Local<Value>	argv[argc]	= {info[0]}; 
-	Local<Function>	cons		= Nan::New<Function>(constructor); 
-	info.GetReturnValue().Set(Nan::NewInstance(cons, argc, argv).ToLocalChecked()); 
+	Napi::EscapableHandleScope scope(env);
+	Napi::Object obj = constructor.New({}).As<Napi::Object>();
+	return scope.Escape(napi_value(obj)).ToObject();
 }
 
-Local<Object> ChmpxNode::GetInstance(Nan::NAN_METHOD_ARGS_TYPE info)
+Napi::Object ChmpxNode::GetInstance(const Napi::CallbackInfo& info)
 {
-	Nan::EscapableHandleScope	scope;
-
-	const unsigned	argc		= 1;
-	Local<Value>	argv[argc]	= {info[0]}; 
-	Local<Function>	cons		= Nan::New<Function>(constructor); 
-	Local<Object> 	instance	= Nan::NewInstance(cons, argc, argv).ToLocalChecked();
-
-	return scope.Escape(instance);
+	if(0 < info.Length()){
+		return ChmpxNode::constructor.New({info[0]});
+	}else{
+		return ChmpxNode::constructor.New({});
+	}
 }
 
 /**
@@ -202,28 +254,32 @@ Local<Object> ChmpxNode::GetInstance(Nan::NAN_METHOD_ARGS_TYPE info)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::On)
+Napi::Value ChmpxNode::On(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No handle emitter name is specified.");
-		return;
+		Napi::TypeError::New(env, "No handle emitter name is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}else if(info.Length() < 2){
-		Nan::ThrowSyntaxError("No callback is specified.");
-		return;
+		Napi::TypeError::New(env, "No callback is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
 	// check emitter name
-	Nan::Utf8String	emitter(info[0]);
-	const char*		pemitter;
-	if(NULL == (pemitter = GetNormalizationEmitter(*emitter))){
-		string	msg = "Unknown ";
-		msg			+= *emitter;
-		msg			+= " emitter";
-		Nan::ThrowSyntaxError(msg.c_str());
-		return;
+	std::string emitter  = info[0].ToString().Utf8Value();
+	const char* pemitter = GetNormalizationEmitter(emitter.c_str());
+	if(!pemitter){
+		std::string	msg	= "Unknown ";
+		msg				+= emitter;
+		msg				+= " emitter";
+		Napi::TypeError::New(env, msg).ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
+
 	// add callback
-	SetChmpxNodeCallback(info, 1, pemitter);
+	return SetChmpxNodeCallback(info, 1, pemitter);
 }
 
 /**
@@ -239,9 +295,9 @@ NAN_METHOD(ChmpxNode::On)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnInitializeOnServer)
+Napi::Value ChmpxNode::OnInitializeOnServer(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
 }
 
 /**
@@ -257,9 +313,9 @@ NAN_METHOD(ChmpxNode::OnInitializeOnServer)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnInitializeOnSlave)
+Napi::Value ChmpxNode::OnInitializeOnSlave(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
 }
 
 /**
@@ -275,9 +331,9 @@ NAN_METHOD(ChmpxNode::OnInitializeOnSlave)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnOpen)
+Napi::Value ChmpxNode::OnOpen(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_OPEN]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_OPEN]);
 }
 
 /**
@@ -293,9 +349,9 @@ NAN_METHOD(ChmpxNode::OnOpen)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnClose)
+Napi::Value ChmpxNode::OnClose(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_CLOSE]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_CLOSE]);
 }
 
 /**
@@ -311,9 +367,9 @@ NAN_METHOD(ChmpxNode::OnClose)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnSend)
+Napi::Value ChmpxNode::OnSend(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_SEND]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_SEND]);
 }
 
 /**
@@ -329,9 +385,9 @@ NAN_METHOD(ChmpxNode::OnSend)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnBroadcast)
+Napi::Value ChmpxNode::OnBroadcast(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_BROADCAST]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_BROADCAST]);
 }
 
 /**
@@ -347,9 +403,9 @@ NAN_METHOD(ChmpxNode::OnBroadcast)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnReply)
+Napi::Value ChmpxNode::OnReply(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_REPLY]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_REPLY]);
 }
 
 /**
@@ -365,9 +421,9 @@ NAN_METHOD(ChmpxNode::OnReply)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OnReceive)
+Napi::Value ChmpxNode::OnReceive(const Napi::CallbackInfo& info)
 {
-	SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_RECEIVE]);
+	return SetChmpxNodeCallback(info, 0, stc_emitters[EMITTER_POS_RECEIVE]);
 }
 
 /**
@@ -383,25 +439,27 @@ NAN_METHOD(ChmpxNode::OnReceive)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::Off)
+Napi::Value ChmpxNode::Off(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No handle emitter name is specified.");
-		return;
+		Napi::TypeError::New(env, "No handle emitter name is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
 	// check emitter name
-	Nan::Utf8String	emitter(info[0]);
-	const char*		pemitter;
-	if(NULL == (pemitter = GetNormalizationEmitter(*emitter))){
-		string	msg = "Unknown ";
-		msg			+= *emitter;
-		msg			+= " emitter";
-		Nan::ThrowSyntaxError(msg.c_str());
-		return;
+	std::string	emitter  = info[0].ToString().Utf8Value();
+	const char*	pemitter = GetNormalizationEmitter(emitter.c_str());
+	if (nullptr == pemitter) {
+		std::string msg	= "Unknown ";
+		msg				+= emitter;
+		msg				+= " emitter";
+		Napi::TypeError::New(env, msg).ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 	// unset callback
-	UnsetChmpxNodeCallback(info, pemitter);
+	return UnsetChmpxNodeCallback(info, pemitter);
 }
 
 /**
@@ -414,9 +472,9 @@ NAN_METHOD(ChmpxNode::Off)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffInitializeOnServer)
+Napi::Value ChmpxNode::OffInitializeOnServer(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
 }
 
 /**
@@ -429,9 +487,9 @@ NAN_METHOD(ChmpxNode::OffInitializeOnServer)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffInitializeOnSlave)
+Napi::Value ChmpxNode::OffInitializeOnSlave(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
 }
 
 /**
@@ -444,9 +502,9 @@ NAN_METHOD(ChmpxNode::OffInitializeOnSlave)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffOpen)
+Napi::Value ChmpxNode::OffOpen(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_OPEN]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_OPEN]);
 }
 
 /**
@@ -459,9 +517,9 @@ NAN_METHOD(ChmpxNode::OffOpen)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffClose)
+Napi::Value ChmpxNode::OffClose(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_CLOSE]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_CLOSE]);
 }
 
 /**
@@ -474,9 +532,9 @@ NAN_METHOD(ChmpxNode::OffClose)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffSend)
+Napi::Value ChmpxNode::OffSend(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_SEND]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_SEND]);
 }
 
 /**
@@ -489,9 +547,9 @@ NAN_METHOD(ChmpxNode::OffSend)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffBroadcast)
+Napi::Value ChmpxNode::OffBroadcast(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_BROADCAST]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_BROADCAST]);
 }
 
 /**
@@ -504,9 +562,9 @@ NAN_METHOD(ChmpxNode::OffBroadcast)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffReply)
+Napi::Value ChmpxNode::OffReply(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_REPLY]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_REPLY]);
 }
 
 /**
@@ -519,9 +577,9 @@ NAN_METHOD(ChmpxNode::OffReply)
  * @return return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::OffReceive)
+Napi::Value ChmpxNode::OffReceive(const Napi::CallbackInfo& info)
 {
-	UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_RECEIVE]);
+	return UnsetChmpxNodeCallback(info, stc_emitters[EMITTER_POS_RECEIVE]);
 }
 
 /**
@@ -549,42 +607,74 @@ NAN_METHOD(ChmpxNode::OffReceive)
  *
  */
 
-NAN_METHOD(ChmpxNode::InitializeOnServer)
+Napi::Value ChmpxNode::InitializeOnServer(const Napi::CallbackInfo& info)
 {
-	ChmpxNode*	obj = Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
+	Napi::Env env = info.Env();
 
-	// check parameters and set
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No configuration file name is specified.");
-		return;
-	}
-	Nan::Utf8String	filename(info[0]);
-	bool			is_auto_rejoin	= false;
-	Nan::Callback*	callback		= obj->_cbs.Find(stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
-	if(2 == info.Length()){
-		if(info[1]->IsFunction()){
-			// function
-			callback		= new Nan::Callback(info[1].As<v8::Function>());
-		}else{
-			is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
-		}
-	}else if(2 < info.Length()){
-		if(!info[2]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
-		}
-		is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
-		callback		= new Nan::Callback(info[2].As<v8::Function>());
+		Napi::TypeError::New(env, "No configuration file name is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new InitializeOnWorker(callback, &(obj->_chmcntrl), *filename, is_auto_rejoin, true));
-		info.GetReturnValue().Set(Nan::True());
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_INITIALIZEONSERVER]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// info[0] : Required
+	if(info[0].IsNull() || info[0].IsUndefined()){
+		Napi::TypeError::New(env, "file name is empty.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	std::string	filename	= info[0].ToString().Utf8Value();
+
+	// info[1]
+	bool	is_auto_rejoin	= false;
+	if(1 < info.Length()){
+		if(info[1].IsFunction()){
+			if(2 < info.Length()){
+				Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
+			}
+			maybeCallback	= info[1].As<Napi::Function>();
+			hasCallback		= true;
+		}else{
+			is_auto_rejoin	= info[1].ToBoolean();
+		}
+	}
+
+	// info[2]
+	if(2 < info.Length()){
+		if(3 < info.Length() || !info[2].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		maybeCallback	= info[2].As<Napi::Function>();
+		hasCallback		= true;
+	}
+
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		InitializeOnWorker* worker = new InitializeOnWorker(maybeCallback, &(obj->_chmcntrl), filename, is_auto_rejoin, true);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
 		obj->_chmcntrl.Clean();
-		info.GetReturnValue().Set(Nan::New(obj->_chmcntrl.InitializeOnServer(*filename, is_auto_rejoin)));
+		bool result = obj->_chmcntrl.InitializeOnServer(filename.c_str(), is_auto_rejoin);
+		return Napi::Boolean::New(env, result);
 	}
 }
 
@@ -613,42 +703,74 @@ NAN_METHOD(ChmpxNode::InitializeOnServer)
  *
  */
 
-NAN_METHOD(ChmpxNode::InitializeOnSlave)
+Napi::Value ChmpxNode::InitializeOnSlave(const Napi::CallbackInfo& info)
 {
-	ChmpxNode*	obj = Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
+	Napi::Env env = info.Env();
 
-	// check parameters and set
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No configuration file name is specified.");
-		return;
-	}
-	Nan::Utf8String	filename(info[0]);
-	bool			is_auto_rejoin	= false;
-	Nan::Callback*	callback		= obj->_cbs.Find(stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
-	if(2 == info.Length()){
-		if(info[1]->IsFunction()){
-			// function
-			callback		= new Nan::Callback(info[1].As<v8::Function>());
-		}else{
-			is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
-		}
-	}else if(2 < info.Length()){
-		if(!info[2]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
-		}
-		is_auto_rejoin	= Nan::To<bool>(info[1]).ToChecked();
-		callback		= new Nan::Callback(info[2].As<v8::Function>());
+		Napi::TypeError::New(env, "No configuration file name is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new InitializeOnWorker(callback, &(obj->_chmcntrl), *filename, is_auto_rejoin, false));
-		info.GetReturnValue().Set(Nan::True());
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_INITIALIZEONSLAVE]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// info[0] : Required
+	if(info[0].IsNull() || info[0].IsUndefined()){
+		Napi::TypeError::New(env, "file name is empty.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	std::string	filename	= info[0].ToString().Utf8Value();
+
+	// info[1]
+	bool	is_auto_rejoin	= false;
+	if(1 < info.Length()){
+		if(info[1].IsFunction()){
+			if(2 < info.Length()){
+				Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
+			}
+			maybeCallback	= info[1].As<Napi::Function>();
+			hasCallback		= true;
+		}else{
+			is_auto_rejoin	= info[1].ToBoolean();
+		}
+	}
+
+	// info[2]
+	if(2 < info.Length()){
+		if(3 < info.Length() || !info[2].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		maybeCallback	= info[2].As<Napi::Function>();
+		hasCallback		= true;
+	}
+
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		InitializeOnWorker* worker = new InitializeOnWorker(maybeCallback, &(obj->_chmcntrl), filename, is_auto_rejoin, false);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
 		obj->_chmcntrl.Clean();
-		info.GetReturnValue().Set(Nan::New(obj->_chmcntrl.InitializeOnSlave(*filename, is_auto_rejoin)));
+		bool result = obj->_chmcntrl.InitializeOnSlave(filename.c_str(), is_auto_rejoin);
+		return Napi::Boolean::New(env, result);
 	}
 }
 
@@ -679,62 +801,98 @@ NAN_METHOD(ChmpxNode::InitializeOnSlave)
  *
  */
 
-NAN_METHOD(ChmpxNode::Send)
+Napi::Value ChmpxNode::Send(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No msgid is specified.");
-		return;
+		Napi::TypeError::New(env, "No msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}else if(info.Length() < 2){
-		Nan::ThrowSyntaxError("No send data is specified.");
-		return;
+		Napi::TypeError::New(env, "No send data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	ChmpxNode*		obj			= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
-
-	// msgid
-	msgid_t			msgid;
-	char*			ptmpmsgid	= reinterpret_cast<char*>(&msgid);
-	Nan::DecodeWrite(ptmpmsgid, Nan::DecodeBytes(info[0], Nan::BINARY), info[0], Nan::BINARY);
-
-	// data
-	ssize_t			binsize		= Nan::DecodeBytes(info[1], Nan::BUFFER);
-	unsigned char*	pbinptr		= reinterpret_cast<unsigned char*>(node::Buffer::Data(info[1]));
-	ChmBinData		bindata;
-	if(!pbinptr){
-		Nan::ThrowSyntaxError("Could not allocate memory.");
-		return;
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
-	bindata.Set(pbinptr, binsize);
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
 
-	// other
-	bool			is_routing	= true;
-	Nan::Callback*	callback	= obj->_cbs.Find(stc_emitters[EMITTER_POS_SEND]);
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_SEND]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// info[0] : msgid Required
+	if(!info[0].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<uint8_t>	msgidbuf	= info[0].As<Napi::Buffer<uint8_t>>();
+	size_t					msgidLen	= std::min(msgidbuf.Length(), static_cast<size_t>(sizeof(msgid_t)));
+	msgid_t					msgid		= CHM_INVALID_MSGID;
+	memcpy(&msgid, msgidbuf.Data(), msgidLen);
+
+	// info[1] : data Required
+	if(!info[1].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong send data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<unsigned char>	databuf	= info[1].As<Napi::Buffer<unsigned char>>();
+	size_t						dataLen	= databuf.Length();
+	ssize_t						binLen	= static_cast<ssize_t>(dataLen);		// adjust to size_t
+	unsigned char*				pbinptr	= databuf.Data();
+	ChmBinData					bindata;
+	if(!pbinptr && 0 < dataLen){
+		Napi::TypeError::New(env, "Could not access buffer data.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	bindata.Set(pbinptr, binLen);
+
+	// info[2]
+	bool	is_routing	= true;
 	if(2 < info.Length()){
-		if(info[2]->IsFunction()){
-			callback = new Nan::Callback(info[2].As<v8::Function>());
-		}else{
-			is_routing = Nan::To<bool>(info[2]).ToChecked();
+		if(info[2].IsFunction()){
 			if(3 < info.Length()){
-				if(!info[3]->IsFunction()){
-					// must callback function is specified at last pos.
-					Nan::ThrowSyntaxError("Last parameter is not callback function.");
-					return;
-				}
-				callback = new Nan::Callback(info[3].As<v8::Function>());
+				Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
 			}
+			maybeCallback	= info[2].As<Napi::Function>();
+			hasCallback		= true;
+		}else{
+			is_routing	= info[2].ToBoolean();
 		}
 	}
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new SendWorker(callback, &(obj->_chmcntrl), msgid, pbinptr, binsize, bindata.GetHash(), is_routing));
-		info.GetReturnValue().Set(Nan::True());
+	// info[3]
+	if(3 < info.Length()){
+		if(4 < info.Length() || !info[3].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		maybeCallback	= info[3].As<Napi::Function>();
+		hasCallback		= true;
+	}
+
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		SendWorker* worker = new SendWorker(maybeCallback, &(obj->_chmcntrl), msgid, pbinptr, binLen, bindata.GetHash(), is_routing);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
 		long	recievercnt	= 0;
-		if(!obj->_chmcntrl.Send(msgid, pbinptr, binsize, bindata.GetHash(), &recievercnt, is_routing)){
+		if(!obj->_chmcntrl.Send(msgid, pbinptr, binLen, bindata.GetHash(), &recievercnt, is_routing)){
 			recievercnt = -1;
 		}
-		info.GetReturnValue().Set(Nan::New<Integer>(static_cast<int32_t>(recievercnt)));
+		return Napi::Number::New(env, static_cast<int32_t>(recievercnt));
 	}
 }
 
@@ -760,54 +918,83 @@ NAN_METHOD(ChmpxNode::Send)
  *
  */
 
-NAN_METHOD(ChmpxNode::Broadcast)
+Napi::Value ChmpxNode::Broadcast(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No msgid is specified.");
-		return;
+		Napi::TypeError::New(env, "No msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}else if(info.Length() < 2){
-		Nan::ThrowSyntaxError("No send data is specified.");
-		return;
+		Napi::TypeError::New(env, "No send data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	ChmpxNode*		obj			= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
-
-	// msgid
-	msgid_t			msgid;
-	char*			ptmpmsgid	= reinterpret_cast<char*>(&msgid);
-	Nan::DecodeWrite(ptmpmsgid, Nan::DecodeBytes(info[0], Nan::BINARY), info[0], Nan::BINARY);
-
-	// data
-	ssize_t			binsize		= Nan::DecodeBytes(info[1], Nan::BUFFER);
-	unsigned char*	pbinptr		= reinterpret_cast<unsigned char*>(node::Buffer::Data(info[1]));
-	ChmBinData		bindata;
-	if(!pbinptr){
-		Nan::ThrowSyntaxError("Could not allocate memory.");
-		return;
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
-	bindata.Set(pbinptr, binsize);
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
 
-	// callback
-	Nan::Callback*	callback	= obj->_cbs.Find(stc_emitters[EMITTER_POS_BROADCAST]);
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_BROADCAST]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// info[0] : msgid Required
+	if(!info[0].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<uint8_t>	msgidbuf	= info[0].As<Napi::Buffer<uint8_t>>();
+	size_t					msgidLen	= std::min(msgidbuf.Length(), static_cast<size_t>(sizeof(msgid_t)));
+	msgid_t					msgid		= CHM_INVALID_MSGID;
+	memcpy(&msgid, msgidbuf.Data(), msgidLen);
+
+	// info[1] : data Required
+	if(!info[1].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong send data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<unsigned char>	databuf	= info[1].As<Napi::Buffer<unsigned char>>();
+	size_t						dataLen	= databuf.Length();
+	ssize_t						binLen	= static_cast<ssize_t>(dataLen);		// adjust to size_t
+	unsigned char*				pbinptr	= databuf.Data();
+	ChmBinData					bindata;
+	if(!pbinptr && 0 < dataLen){
+		Napi::TypeError::New(env, "Could not access buffer data.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	bindata.Set(pbinptr, binLen);
+
+	// info[2]
 	if(2 < info.Length()){
-		if(!info[2]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
+		if(3 < info.Length() || !info[2].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
 		}
-		callback = new Nan::Callback(info[2].As<v8::Function>());
+		maybeCallback	= info[2].As<Napi::Function>();
+		hasCallback		= true;
 	}
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new BroadcastWorker(callback, &(obj->_chmcntrl), msgid, pbinptr, binsize, bindata.GetHash()));
-		info.GetReturnValue().Set(Nan::True());
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		BroadcastWorker* worker = new BroadcastWorker(maybeCallback, &(obj->_chmcntrl), msgid, pbinptr, binLen, bindata.GetHash());
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
 		long	recievercnt	= 0;
-		if(!obj->_chmcntrl.Broadcast(msgid, pbinptr, binsize, bindata.GetHash(), &recievercnt)){
+		if(!obj->_chmcntrl.Broadcast(msgid, pbinptr, binLen, bindata.GetHash(), &recievercnt)){
 			recievercnt = -1;
 		}
-		info.GetReturnValue().Set(Nan::New<Integer>(static_cast<int32_t>(recievercnt)));
+		return Napi::Number::New(env, static_cast<int32_t>(recievercnt));
 	}
 }
 
@@ -831,49 +1018,91 @@ NAN_METHOD(ChmpxNode::Broadcast)
  * @return	Return true for success, false for failure
  */
 
-NAN_METHOD(ChmpxNode::Reply)
+Napi::Value ChmpxNode::Reply(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No compkt is specified.");
-		return;
+		Napi::TypeError::New(env, "No compkt is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}else if(info.Length() < 2){
-		Nan::ThrowSyntaxError("No reply data is specified.");
-		return;
+		Napi::TypeError::New(env, "No reply data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	ChmpxNode*		obj		= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
 
-	// compkt
-	COMPKT			compkt;
-	char*			ppktbuf	= reinterpret_cast<char*>(&compkt);
-	Nan::DecodeWrite(ppktbuf, Nan::DecodeBytes(info[0], Nan::BINARY), info[0], Nan::BINARY);
-
-	// data
-	ssize_t			binsize	= Nan::DecodeBytes(info[1], Nan::BUFFER);
-	unsigned char*	pbinptr	= reinterpret_cast<unsigned char*>(node::Buffer::Data(info[1]));
-	if(!pbinptr){
-		Nan::ThrowSyntaxError("Could not allocate memory.");
-		return;
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_REPLY]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
 	}
 
-	// callback
-	Nan::Callback*	callback= obj->_cbs.Find(stc_emitters[EMITTER_POS_REPLY]);
+	// info[0] : compkt Required
+	if(!info[0].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong compkt is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<unsigned char>	pktBuf	= info[0].As<Napi::Buffer<unsigned char>>();
+	size_t						pktLen	= pktBuf.Length();
+	const unsigned char*		pktptr	= pktBuf.Data();
+	size_t						pktSize	= sizeof(COMPKT);
+	size_t						copyLen	= std::min(pktLen, pktSize);
+	COMPKT						compkt;
+
+	if(!pktptr && 0 < pktLen){
+		Napi::TypeError::New(env, "Could not access compkt.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	memset(&compkt, 0, pktSize);
+	if(0 < copyLen){
+		memcpy(reinterpret_cast<char*>(&compkt), pktptr, copyLen);
+	}
+
+	// info[1] : data Required
+	if(!info[1].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong send data is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<unsigned char>	databuf	= info[1].As<Napi::Buffer<unsigned char>>();
+	size_t						dataLen	= databuf.Length();
+	ssize_t						binLen	= static_cast<ssize_t>(dataLen);		// adjust to size_t
+	unsigned char*				pbinptr	= databuf.Data();
+	ChmBinData					bindata;
+	if(!pbinptr && 0 < dataLen){
+		Napi::TypeError::New(env, "Could not access buffer data.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	bindata.Set(pbinptr, binLen);
+
+	// info[2]
 	if(2 < info.Length()){
-		if(!info[2]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
+		if(3 < info.Length() || !info[2].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
 		}
-		callback = new Nan::Callback(info[2].As<v8::Function>());
+		maybeCallback	= info[2].As<Napi::Function>();
+		hasCallback		= true;
 	}
 
-
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new ReplyWorker(callback, &(obj->_chmcntrl), &compkt, pbinptr, binsize));
-		info.GetReturnValue().Set(Nan::True());
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		ReplyWorker* worker = new ReplyWorker(maybeCallback, &(obj->_chmcntrl), &compkt, pbinptr, binLen);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
-		info.GetReturnValue().Set(Nan::New(obj->_chmcntrl.Reply(&compkt, pbinptr, binsize)));
+		bool result = obj->_chmcntrl.Reply(&compkt, pbinptr, binLen);
+		return Napi::Boolean::New(env, result);
 	}
 }
 
@@ -970,167 +1199,251 @@ NAN_METHOD(ChmpxNode::Reply)
  *
  */
 
-NAN_METHOD(ChmpxNode::Receive)
+Napi::Value ChmpxNode::Receive(const Napi::CallbackInfo& info)
 {
-	ChmpxNode*		obj				= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
+	Napi::Env env = info.Env();
+
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj = Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// [NOTE]
+	// Here the Emitter is detected, but it is not yet determined whether
+	// to invoke the Callback.
+	//
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_RECEIVE]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// common variables
 	bool			is_on_server	= obj->_chmcntrl.IsClientOnSvrType();
-	Local<Array>	rcvarr;
+	Napi::Array		rcvarr;
 	msgid_t			msgid			= CHM_INVALID_MSGID;			// only on slave type
 	int				timeout_ms		= 0;
 	bool			no_giveup_rejoin= false;						// only on server type
-	Nan::Callback*	callback		= NULL;
 
+	//
 	// parse parameter and check method type
+	//
 	if(is_on_server){
+		//---------------------------------------------
 		// on server type
+		//---------------------------------------------
 		bool	precheck_callback = false;
 		if(info.Length() < 1){
 			precheck_callback = true;
 		}else{
-			if(!info[0]->IsArray()){
+			if(!info[0].IsArray()){
 				precheck_callback = true;
 			}
 		}
+
 		if(!precheck_callback){
-			// without callback
-			// argv[0] = receive data array
-			rcvarr = Local<Array>::Cast(info[0]);
+			// Synchronous (no callback)
+			hasCallback = false;
+
+			// info[0] = receive data array
+			rcvarr = info[0].As<Napi::Array>();
+
+			// info[1]
 			if(1 < info.Length()){
-				if(!info[1]->IsBoolean()){
-					// argv[1] = timeout ms
-					timeout_ms = Nan::To<int>(info[1]).ToChecked();
+				if(!info[1].IsBoolean()){
+					// info[1] = timeout ms
+					timeout_ms = info[1].ToNumber().Int32Value();
+
 					if(2 < info.Length()){
-						// argv[2] = no giveup flag
-						if(!info[2]->IsBoolean()){
-							Nan::ThrowSyntaxError("Unknown parameter is specified for loop flag.");
-							return;
+						// info[2] = no giveup flag
+						if(3 < info.Length()){
+							Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+							return env.Undefined();
 						}
-						no_giveup_rejoin = Nan::To<bool>(info[2]).ToChecked();
+						if(!info[2].IsBoolean()){
+							Napi::TypeError::New(env, "Unknown parameter is specified for loop flag.").ThrowAsJavaScriptException();
+							return env.Undefined();
+						}
+						no_giveup_rejoin = info[2].ToBoolean();
 					}
 				}else{
-					// argv[1] = no giveup flag
-					no_giveup_rejoin = Nan::To<bool>(info[1]).ToChecked();
+					// info[1] = no giveup flag
+					if(2 < info.Length()){
+						Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+						return env.Undefined();
+					}
+					no_giveup_rejoin = info[1].ToBoolean();
 				}
 			}
+
 		}else{
-			// with callback
-			callback = obj->_cbs.Find(stc_emitters[EMITTER_POS_RECEIVE]);
-
+			// Asynchronous (allow callback)
 			if(0 < info.Length()){
-				if(info[0]->IsBoolean()){
-					// argv[0] = no giveup flag
-					no_giveup_rejoin = Nan::To<bool>(info[0]).ToChecked();
+				if(info[0].IsBoolean()){
+					// info[0] = no giveup flag
+					no_giveup_rejoin = info[0].ToBoolean();
+
 					if(1 < info.Length()){
-						// argv[1] = callback function
-						if(!info[1]->IsFunction()){
-							Nan::ThrowSyntaxError("Unknown parameter is specified for callback function.");
-							return;
+						// info[1] = callback function
+						if(2 < info.Length()){
+							Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+							return env.Undefined();
 						}
-						callback = new Nan::Callback(info[1].As<v8::Function>());
+						if(!info[1].IsFunction()){
+							Napi::TypeError::New(env, "Unknown parameter is specified for callback function.").ThrowAsJavaScriptException();
+							return env.Undefined();
+						}
+						maybeCallback	= info[1].As<Napi::Function>();
+						hasCallback		= true;
 					}
-				}else if(info[0]->IsFunction()){
-					// argv[0] = callback function
-					callback = new Nan::Callback(info[0].As<v8::Function>());
+
+				}else if(info[0].IsFunction()){
+					// info[0] = callback function
+					if(1 < info.Length()){
+						Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+						return env.Undefined();
+					}
+					maybeCallback	= info[0].As<Napi::Function>();
+					hasCallback		= true;
 
 				}else{
-					// argv[0] = timeout ms
-					timeout_ms = Nan::To<int>(info[0]).ToChecked();
+					// info[0] = timeout ms
+					timeout_ms = info[0].ToNumber().Int32Value();
+
 					if(1 < info.Length()){
-						if(info[1]->IsBoolean()){
-							// argv[1] = no giveup flag
-							no_giveup_rejoin = Nan::To<bool>(info[1]).ToChecked();
+						if(info[1].IsBoolean()){
+							// info[1] = no giveup flag
+							no_giveup_rejoin = info[1].ToBoolean();
+
 							if(2 < info.Length()){
-								if(!info[2]->IsFunction()){
-									Nan::ThrowSyntaxError("Unknown parameter is specified for callback function.");
-									return;
+								// info[2] = callback function
+								if(3 < info.Length()){
+									Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+									return env.Undefined();
 								}
-								// argv[2] = callback function
-								callback = new Nan::Callback(info[2].As<v8::Function>());
+								if(!info[2].IsFunction()){
+									Napi::TypeError::New(env, "Unknown parameter is specified for callback function.").ThrowAsJavaScriptException();
+									return env.Undefined();
+								}
+								maybeCallback	= info[2].As<Napi::Function>();
+								hasCallback		= true;
 							}
-						}else if(info[1]->IsFunction()){
-							// argv[1] = callback function
-							callback = new Nan::Callback(info[1].As<v8::Function>());
+
+						}else if(info[1].IsFunction()){
+							// info[1] = callback function
+							if(2 < info.Length()){
+								Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+								return env.Undefined();
+							}
+							maybeCallback	= info[1].As<Napi::Function>();
+							hasCallback		= true;
 						}else{
-							Nan::ThrowSyntaxError("Unknown parameter is specified for no giveup flag or callback function.");
-							return;
+							Napi::TypeError::New(env, "Unknown parameter is specified for no giveup flag or callback function.").ThrowAsJavaScriptException();
+							return env.Undefined();
 						}
 					}
 				}
 			}
-			if(!callback){
-				Nan::ThrowSyntaxError("Called receive method without callback function.");
-				return;
+			if(!hasCallback){
+				Napi::TypeError::New(env, "Called receive method without callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
 			}
 		}
+
 	}else{
+		//---------------------------------------------
 		// on slave type
-		// argv[0] = msgid
-		if(info.Length() < 1){
-			Nan::ThrowSyntaxError("No msgid is specified.");
-			return;
+		//---------------------------------------------
+		// info[0] : msgid Required
+		if(info.Length() < 1 || !info[0].IsBuffer()){
+			Napi::TypeError::New(env, "Wrong msgid is specified.").ThrowAsJavaScriptException();
+			return env.Undefined();
 		}
-		char*	ptmpmsgid = reinterpret_cast<char*>(&msgid);
-		Nan::DecodeWrite(ptmpmsgid, Nan::DecodeBytes(info[0], Nan::BINARY), info[0], Nan::BINARY);
+		Napi::Buffer<uint8_t>	msgidbuf = info[0].As<Napi::Buffer<uint8_t>>();
+		size_t					msgidLen = std::min(msgidbuf.Length(), static_cast<size_t>(sizeof(msgid_t)));
+		memcpy(&msgid, msgidbuf.Data(), msgidLen);
 
 		// precheck parameter whichever callback
 		bool	precheck_callback = false;
 		if(info.Length() < 2){
 			precheck_callback = true;
 		}else{
-			if(!info[1]->IsArray()){
+			if(!info[1].IsArray()){
 				precheck_callback = true;
 			}
 		}
 
 		if(!precheck_callback){
-			// without callback
-			// argv[1] = receive data array
-			rcvarr = Local<Array>::Cast(info[1]);
+			// Synchronous (no callback)
+			hasCallback = false;
+
+			// info[1] = receive data array
+			rcvarr = info[1].As<Napi::Array>();
 
 			if(2 < info.Length()){
-				// argv[2] = timeout ms
-				timeout_ms = Nan::To<int>(info[2]).ToChecked();
+				// info[2] = timeout ms
+				if(3 < info.Length()){
+					Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+					return env.Undefined();
+				}
+				timeout_ms = info[2].ToNumber().Int32Value();
 			}
+
 		}else{
-			// with callback
-			callback = obj->_cbs.Find(stc_emitters[EMITTER_POS_RECEIVE]);
-
+			// Asynchronous (allow callback)
 			if(1 < info.Length()){
-				if(!info[1]->IsFunction()){
-					// argv[1] = timeout ms
-					timeout_ms = Nan::To<int>(info[1]).ToChecked();
-					if(2 < info.Length()){
-						// argv[2] = callback function
-						if(!info[2]->IsFunction()){
-							Nan::ThrowSyntaxError("Unknown parameter is specified for callback function.");
-							return;
+				if(!info[1].IsFunction()){
+					// info[1] = timeout ms
+					timeout_ms = info[1].ToNumber().Int32Value();
 
+					if(2 < info.Length()){
+						// info[2] = callback function
+						if(3 < info.Length()){
+							Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+							return env.Undefined();
 						}
-						callback = new Nan::Callback(info[2].As<v8::Function>());
+						if(!info[2].IsFunction()){
+							Napi::TypeError::New(env, "Unknown parameter is specified for callback function.").ThrowAsJavaScriptException();
+							return env.Undefined();
+						}
+						maybeCallback	= info[2].As<Napi::Function>();
+						hasCallback		= true;
 					}
 				}else{
-					// argv[1] = callback function
-					callback = new Nan::Callback(info[1].As<v8::Function>());
+					// info[1] = callback function
+					if(2 < info.Length()){
+						Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+						return env.Undefined();
+					}
+					maybeCallback	= info[1].As<Napi::Function>();
+					hasCallback		= true;
 				}
 			}
-			if(!callback){
-				Nan::ThrowSyntaxError("Called receive method without callback function.");
-				return;
+			if(!hasCallback){
+				Napi::TypeError::New(env, "Called receive method without callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
 			}
 		}
 	}
 
-	// work
-	if(callback){
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
 		if(is_on_server){
-			Nan::AsyncQueueWorker(new ReceiveWorker(callback, &(obj->_chmcntrl), timeout_ms, no_giveup_rejoin));
+			ReceiveWorker* worker = new ReceiveWorker(maybeCallback, &(obj->_chmcntrl), timeout_ms, no_giveup_rejoin);
+			worker->Queue();
 		}else{
-			Nan::AsyncQueueWorker(new ReceiveWorker(callback, &(obj->_chmcntrl), msgid, timeout_ms));
+			ReceiveWorker* worker = new ReceiveWorker(maybeCallback, &(obj->_chmcntrl), msgid, timeout_ms);
+			worker->Queue();
 		}
-		info.GetReturnValue().Set(Nan::True());
+		return Napi::Boolean::New(env, true);
 	}else{
-		PCOMPKT			pComPkt	= NULL;
-		unsigned char*	pBody	= NULL;
+		PCOMPKT			pComPkt	= nullptr;
+		unsigned char*	pBody	= nullptr;
 		size_t			Length	= 0;
 		bool			result;
 
@@ -1140,20 +1453,28 @@ NAN_METHOD(ChmpxNode::Receive)
 		}else{
 			result = obj->_chmcntrl.Receive(msgid, &pComPkt, &pBody, &Length, timeout_ms);
 		}
-
 		// set result data to array
 		if(!pComPkt && result){
 			result = false;			// maybe timeouted
 		}
 		if(result){
-			// set received data to array
-			Nan::Set(rcvarr, 0, Nan::Encode(pComPkt,sizeof(COMPKT), Nan::BINARY));
-			Nan::Set(rcvarr, 1, Nan::Encode(pBody,	Length,			Nan::BUFFER));
+			// set COMPKT to array[0]
+			Napi::Value	pktBuf = Napi::Buffer<char>::Copy(env, reinterpret_cast<char*>(pComPkt), static_cast<size_t>(sizeof(COMPKT)));
+			rcvarr.Set(static_cast<uint32_t>(0), pktBuf);
+
+			// set body to array[1]
+			Napi::Value bodyBuf;
+			if(pBody && 0 < Length){
+				bodyBuf = Napi::Buffer<unsigned char>::Copy(env, reinterpret_cast<unsigned char*>(pBody), static_cast<size_t>(Length));
+			}else{
+				bodyBuf = Napi::Buffer<unsigned char>::New(env, 0);
+			}
+			rcvarr.Set(static_cast<uint32_t>(1), bodyBuf);
 		}
 		CHM_Free(pComPkt);
 		CHM_Free(pBody);
 
-		info.GetReturnValue().Set(Nan::New(result));
+		return Napi::Boolean::New(env, result);
 	}
 }
 
@@ -1179,39 +1500,67 @@ NAN_METHOD(ChmpxNode::Receive)
  *			Otherwise, returns msgid which is opened but if something error occurred, returns null.
  */
 
-NAN_METHOD(ChmpxNode::Open)
+Napi::Value ChmpxNode::Open(const Napi::CallbackInfo& info)
 {
-	ChmpxNode*		obj				= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
-	bool			no_giveup_rejoin= false;
-	Nan::Callback*	callback		= obj->_cbs.Find(stc_emitters[EMITTER_POS_OPEN]);
+	Napi::Env env = info.Env();
 
-	if(1 == info.Length()){
-		if(info[0]->IsFunction()){
-			callback		= new Nan::Callback(info[0].As<v8::Function>());
-		}else{
-			no_giveup_rejoin= Nan::To<bool>(info[0]).ToChecked();
-		}
-	}else if(1 < info.Length()){
-		if(!info[1]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
-		}
-		no_giveup_rejoin= Nan::To<bool>(info[0]).ToChecked();
-		callback		= new Nan::Callback(info[1].As<v8::Function>());
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_OPEN]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
 	}
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new OpenWorker(callback, &(obj->_chmcntrl), no_giveup_rejoin));
-		info.GetReturnValue().Set(Nan::True());
+	// info[0]
+	bool	no_giveup_rejoin = false;
+	if(0 < info.Length()){
+		if(info[0].IsFunction()){
+			if(1 < info.Length()){
+				Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+				return env.Undefined();
+			}
+			maybeCallback	= info[0].As<Napi::Function>();
+			hasCallback		= true;
+		}else{
+			no_giveup_rejoin= info[0].ToBoolean();
+		}
+	}
+
+	// info[1]
+	if(1 < info.Length()){
+		if(2 < info.Length()){
+			Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		if(!info[1].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		maybeCallback	= info[0].As<Napi::Function>();
+		hasCallback		= true;
+	}
+
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		OpenWorker* worker = new OpenWorker(maybeCallback, &(obj->_chmcntrl), no_giveup_rejoin);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
 		msgid_t	msgid = obj->_chmcntrl.Open(no_giveup_rejoin);
-		if(CHM_INVALID_MSGID != msgid){
-			info.GetReturnValue().Set(Nan::Encode(&msgid, sizeof(msgid_t), Nan::BINARY));
-		}else{
-			info.GetReturnValue().SetNull();
+		if(CHM_INVALID_MSGID == msgid){
+			return env.Null();
 		}
+	    return Napi::Buffer<uint8_t>::Copy(env, reinterpret_cast<uint8_t*>(&msgid), static_cast<size_t>(sizeof(msgid_t)));
 	}
 }
 
@@ -1235,34 +1584,65 @@ NAN_METHOD(ChmpxNode::Open)
  *
  */
 
-NAN_METHOD(ChmpxNode::Close)
+Napi::Value ChmpxNode::Close(const Napi::CallbackInfo& info)
 {
+	Napi::Env env = info.Env();
+
+	// check
 	if(info.Length() < 1){
-		Nan::ThrowSyntaxError("No msgid is specified.");
-		return;
+		Napi::TypeError::New(env, "No msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
 	}
 
-	ChmpxNode*		obj			= Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
-	msgid_t			msgid;
-	char*			ptmpmsgid	= reinterpret_cast<char*>(&msgid);
-	Nan::Callback*	callback	= obj->_cbs.Find(stc_emitters[EMITTER_POS_CLOSE]);
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	// initial callback comes from emitter map if set
+	Napi::Function				maybeCallback;
+	bool						hasCallback		= false;
+	Napi::FunctionReference*	emitterCbRef	= obj->_cbs.Find(stc_emitters[EMITTER_POS_CLOSE]);
+	if(emitterCbRef){
+		maybeCallback	= emitterCbRef->Value();
+		hasCallback		= true;
+	}
+
+	// info[0] : msgid Required
+	if(!info[0].IsBuffer()){
+		Napi::TypeError::New(env, "Wrong msgid is specified.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	Napi::Buffer<uint8_t>	msgidbuf	= info[0].As<Napi::Buffer<uint8_t>>();
+	size_t					msgidLen	= std::min(msgidbuf.Length(), static_cast<size_t>(sizeof(msgid_t)));
+	msgid_t					msgid		= CHM_INVALID_MSGID;
+	memcpy(&msgid, msgidbuf.Data(), msgidLen);
+
+	// info[1]
 	if(1 < info.Length()){
-		if(!info[1]->IsFunction()){
-			// must callback function is specified at last pos.
-			Nan::ThrowSyntaxError("Last parameter is not callback function.");
-			return;
+		if(2 < info.Length()){
+			Napi::TypeError::New(env, "Too many parameters.").ThrowAsJavaScriptException();
+			return env.Undefined();
 		}
-		callback = new Nan::Callback(info[1].As<v8::Function>());
+		if(!info[1].IsFunction()){
+			Napi::TypeError::New(env, "Last parameter is not callback function.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		maybeCallback	= info[1].As<Napi::Function>();
+		hasCallback		= true;
 	}
-	// msgid
-	Nan::DecodeWrite(ptmpmsgid, Nan::DecodeBytes(info[0], Nan::BINARY), info[0], Nan::BINARY);
 
-	// work
-	if(callback){
-		Nan::AsyncQueueWorker(new CloseWorker(callback, &(obj->_chmcntrl), msgid));
-		info.GetReturnValue().Set(Nan::True());
+	// Execute
+	if(hasCallback){
+		// Create worker and Queue it
+		CloseWorker* worker = new CloseWorker(maybeCallback, &(obj->_chmcntrl), msgid);
+		worker->Queue();
+		return Napi::Boolean::New(env, true);
 	}else{
-		info.GetReturnValue().Set(Nan::New(obj->_chmcntrl.Close(msgid)));
+		bool result = obj->_chmcntrl.Close(msgid);
+		return Napi::Boolean::New(env, result);
 	}
 }
 
@@ -1273,13 +1653,20 @@ NAN_METHOD(ChmpxNode::Close)
  *
  * @return	Returns true as chmpx process is running, false means chmpx process does not exist.
  */
-NAN_METHOD(ChmpxNode::IsChmpxExit)
-{
-	ChmpxNode*	obj = Nan::ObjectWrap::Unwrap<ChmpxNode>(info.This());
 
-	info.GetReturnValue().Set(Nan::New(
-		obj->_chmcntrl.IsChmpxExit()
-	));
+Napi::Value ChmpxNode::IsChmpxExit(const Napi::CallbackInfo& info)
+{
+	Napi::Env env = info.Env();
+
+	// Unwrap
+	if(!info.This().IsObject() || !info.This().As<Napi::Object>().InstanceOf(ChmpxNode::constructor.Value())){
+		Napi::TypeError::New(env, "Invalid this object(ChmpxNode instance)").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	ChmpxNode*	obj	= Napi::ObjectWrap<ChmpxNode>::Unwrap(info.This().As<Napi::Object>());
+
+	bool result = obj->_chmcntrl.IsChmpxExit();
+	return Napi::Boolean::New(env, result);
 }
 
 //@}
