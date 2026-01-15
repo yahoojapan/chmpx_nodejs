@@ -78,7 +78,7 @@ import url					from 'url';
 		const	tryPaths = [
 			path.join(__dirname, '..', 'index.js'),
 			path.join(__dirname, '..', 'lib', 'index.js'),
-			path.join(__dirname, '..', 'build', 'Release', 'k2hash.node')	// dynamic import of .node may not work; this is just a try
+			path.join(__dirname, '..', 'build', 'Release', 'chmpx.node')	// dynamic import of .node may not work; this is just a try
 		];
 
 		for(const tgPath of tryPaths){

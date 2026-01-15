@@ -184,7 +184,7 @@ CheckCommands()
 #==========================================================
 PrintUsage()
 {
-	echo "Usage:   $1 [--debuglevel(-d)	INFO/WARN/ERR/SILENT(default)] [-logfile(-l) <path>] Command"
+	echo "Usage:   $1 [--debuglevel(-d)	INFO/ERR(default)] [-logfile(-l) <path>] [--libdebuglevel(-ld) DUMP/INFO/WARN/ERR/SILENT(default)] [--liblogfile(-ll) <path>] [--commonjs(-cjs)] Command"
 	echo ""
 	echo "Command: chmpx_slave          Slave test"
 	echo "         chmpx_server         Server test"
@@ -264,12 +264,12 @@ while [ $# -ne 0 ]; do
 		fi
 		shift
 		if [ $# -eq 0 ]; then
-			PRNERR "--libdebuglevel(-ld) option needs parameter(info/warn/err/silent)"
+			PRNERR "--libdebuglevel(-ld) option needs parameter(dump/info/warn/err/silent)"
 			exit 1
 		fi
 		if echo "$1" | grep -q -i -e "^dmp$" -e "^dump$"; then
 			LIB_DEBUG_MODE="DUMP"
-		elif echo "$1" | grep -q -i -e "^inf$" -e "^info$"; then
+		elif echo "$1" | grep -q -i -e "^inf$" -e "^info$" -e "^msg$"; then
 			LIB_DEBUG_MODE="INFO"
 		elif echo "$1" | grep -q -i -e "^wan$" -e "^warn$" -e "^warning$"; then
 			LIB_DEBUG_MODE="WAN"
@@ -340,7 +340,7 @@ if [ -z "${LIB_DEBUG_MODE}" ] && [ -n "${CHMDBGMODE}" ]; then
 	# other than "SILENT"
 	if echo "${CHMDBGMODE}" | grep -q -i -e "^dmp$" -e "^dump$"; then
 		LIB_DEBUG_MODE="DUMP"
-	elif echo "${CHMDBGMODE}" | grep -q -i -e "^inf$" -e "^info$"; then
+	elif echo "${CHMDBGMODE}" | grep -q -i -e "^inf$" -e "^info$" -e "^msg$"; then
 		LIB_DEBUG_MODE="INFO"
 	elif echo "${CHMDBGMODE}" | grep -q -i -e "^wan$" -e "^warn$" -e "^warning$"; then
 		LIB_DEBUG_MODE="WAN"
@@ -597,7 +597,7 @@ fi
 #
 # Run command
 #
-PRNTITLE "Test : ${ONE_COMMAND}${PRINT_CJS_MODE}"
+PRNTITLE "Test : ${PRINT_CJS_MODE}"
 
 PRNINFO "Run : NODE_PATH=${CHMPX_NODE_PATH} TESTS_PATH=${TESTSDIR} SCRIPT_TYPE=${SCRIPT_TYPE} CHMDBGMODE=${LIB_DEBUG_MODE} CHMDBGFILE=${LIB_DEBUG_LOG} node ${ESM_IMPORT_OPT} ${ESM_EXPR_OPT} ${MOCHA_BIN} --extensions ts ${TEST_FILE_DIR_PATH}/${CMD_PREFIX}${COMMAND}${TEST_FILE_SUFFIX}"
 

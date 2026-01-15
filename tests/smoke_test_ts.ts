@@ -29,7 +29,7 @@
 //	  correctly(pass type checks).
 //	  Only compile(type check) without executing(tsc --noEmit).
 //	- Verify that type representations(constructible/callable
-//	   k2hash, classes within namespaces, etc.) are provided
+//	   chmpx, classes within namespaces, etc.) are provided
 //	   to users correctly.
 //
 // [Outline]
