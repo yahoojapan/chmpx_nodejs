@@ -1,3 +1,9 @@
+chmpx (2.0.1) unstable; urgency=low
+
+  * Fixed some test codes in tests directory - #55
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Thu, 15 Jan 2026 13:28:18 +0900
+
 chmpx (2.0.0) unstable; urgency=low
 
   * Updated to N-API base and Changed packaging and Supported TS/ESM - #53
