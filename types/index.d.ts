@@ -214,6 +214,9 @@ declare module 'chmpx'
 	//
 	export type ChmpxNode			= chmpx.ChmpxNode;
 	export type ChmpxFactoryType	= chmpx.ChmpxFactoryType;
+
+	// Add convenient alias (PascalCase)
+	export type Chmpx				= ChmpxNode;
 }
 
 /*
