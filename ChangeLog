@@ -1,3 +1,9 @@
+chmpx (2.0.2) unstable; urgency=low
+
+  * Added type aliases and exports for Typescript - #57
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Fri, 23 Jan 2026 18:10:38 +0900
+
 chmpx (2.0.1) unstable; urgency=low
 
   * Fixed some test codes in tests directory - #55

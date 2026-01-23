@@ -1,6 +1,6 @@
 {
   "name": "chmpx",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "CHMPX addon library for Node.js",
   "os": "linux",
   "main": "index.js",
