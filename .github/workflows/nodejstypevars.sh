@@ -467,7 +467,8 @@ fi
 # processes.
 # Each value has a default value for NodeJS processing.
 #
-#	CPPCHECK_TARGET					"."
+#	CPPCHECK_EXCLUDE_OPTS			"-i node_modules"
+#	CPPCHECK_TARGET					"${CPPCHECK_EXCLUDE_OPTS} ."
 #	CPPCHECK_BASE_OPT				"--quiet --error-exitcode=1 --inline-suppr -j 8 --std=c++17 --xml"
 #	CPPCHECK_ENABLE_VALUES			"warning style information missingInclude"
 #	CPPCHECK_IGNORE_VALUES			"unmatchedSuppression missingIncludeSystem normalCheckLevelMaxBranches"
