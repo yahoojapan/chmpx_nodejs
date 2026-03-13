@@ -182,6 +182,11 @@ check_and_download_asset_file()
 		PRNINFO "Not found ${ASSET_TGZ_FILENAME} file."
 		return 1
 	fi
+	if ! tar tvfz "${SRCTOP}/${ASSET_TGZ_FILENAME}" >/dev/null 2>&1; then
+		PRNINFO "${ASSET_TGZ_FILENAME} file is not tar.gz format."
+		rm -f "${SRCTOP}/${ASSET_TGZ_FILENAME}" 2>/dev/null
+		return 1
+	fi
 	if ! _RESULT_CODE=$("${CURLCMD}" -s -S -L -w '%{http_code}' -o "${SRCTOP}/${ASSET_SHA256_FILENAME}" -X GET "${ASSET_SHA256_DOWNLOAD_URL}" --insecure); then
 		PRNINFO "Failed to get sha256 file(${ASSET_SHA256_FILENAME})."
 		rm -f "${SRCTOP}/${ASSET_SHA256_FILENAME}" 2>/dev/null
@@ -203,10 +208,14 @@ check_and_download_asset_file()
 	SHA256_VALUE=$(awk '{print $1}' "${SRCTOP}/${ASSET_SHA256_FILENAME}" 2>/dev/null | tr -d '\n')
 	if ! DL_TGZ_SHA256_VALUE=$(sha256sum "${SRCTOP}/${ASSET_TGZ_FILENAME}" 2>/dev/null | awk '{print $1}' 2>/dev/null | tr -d '\n'); then
 		PRNINFO "Failed to make sha256 value from download tgz file."
+		rm -f "${SRCTOP}/${ASSET_TGZ_FILENAME}" 2>/dev/null
+		rm -f "${SRCTOP}/${ASSET_SHA256_FILENAME}" 2>/dev/null
 		return 1
 	fi
 	if [ -z "${SHA256_VALUE}" ] || [ -z "${DL_TGZ_SHA256_VALUE}" ] || [ "${SHA256_VALUE}" != "${DL_TGZ_SHA256_VALUE}" ]; then
 		PRNINFO "The sha256 value of the downloaded tgz file is incorrect."
+		rm -f "${SRCTOP}/${ASSET_TGZ_FILENAME}" 2>/dev/null
+		rm -f "${SRCTOP}/${ASSET_SHA256_FILENAME}" 2>/dev/null
 		return 1
 	fi
 
@@ -217,6 +226,8 @@ check_and_download_asset_file()
 	cd "${SRCTOP}" || exit 1
 	if ! tar xvfz "${SRCTOP}/${ASSET_TGZ_FILENAME}" >/dev/null 2>&1; then
 		PRNINFO "Could not extract files from ${ASSET_TGZ_FILENAME} file."
+		rm -f "${SRCTOP}/${ASSET_TGZ_FILENAME}" 2>/dev/null
+		rm -f "${SRCTOP}/${ASSET_SHA256_FILENAME}" 2>/dev/null
 		cd "${_CUR_DIR}" || exit 1
 		return 1
 	fi

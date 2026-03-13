@@ -1369,7 +1369,8 @@ PRNSUCCESS "Start to check options and environments"
 #
 # Default command parameters for each phase
 #
-CPPCHECK_TARGET="."
+CPPCHECK_EXCLUDE_OPTS="-i node_modules"
+CPPCHECK_TARGET="${CPPCHECK_EXCLUDE_OPTS} ."
 CPPCHECK_BASE_OPT="--quiet --error-exitcode=1 --inline-suppr -j 8 --std=c++17 --xml --enable=warning,style,information,missingInclude"
 CPPCHECK_ENABLE_VALUES="warning style information missingInclude"
 CPPCHECK_IGNORE_VALUES="unmatchedSuppression missingIncludeSystem normalCheckLevelMaxBranches"
