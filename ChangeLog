@@ -1,3 +1,9 @@
+chmpx (2.0.3) unstable; urgency=low
+
+  * Added files to npm packages and Fixed cppcheck options - #59
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Fri, 13 Mar 2026 16:24:38 +0900
+
 chmpx (2.0.2) unstable; urgency=low
 
   * Added type aliases and exports for Typescript - #57
