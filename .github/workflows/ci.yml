@@ -63,6 +63,7 @@ jobs:
 
       matrix:
         container:
+          - ubuntu:26.04
           - ubuntu:24.04
           - ubuntu:22.04
           - debian:trixie
@@ -71,14 +72,13 @@ jobs:
           - rockylinux/rockylinux:10
           - rockylinux:9
           - rockylinux:8
-          - fedora:42
-          - fedora:41
+          - fedora:44
+          - fedora:43
+          - alpine:3.23
           - alpine:3.22
           - alpine:3.21
-          - alpine:3.20
 
         node-version:
-          - 20
           - 22
           - 24
 
@@ -101,7 +101,7 @@ jobs:
       # job can access it
       #
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       #
       # Set environments from secrets
