@@ -1,3 +1,9 @@
+chmpx (2.0.4) unstable; urgency=low
+
+  * Changed support OS/NodeJS and Fixed some code - #61
+
+ -- Takeshi Nakatani <ggtakec@gmail.com>  Thu, 23 Apr 2026 16:15:22 +0900
+
 chmpx (2.0.3) unstable; urgency=low
 
   * Added files to npm packages and Fixed cppcheck options - #59
