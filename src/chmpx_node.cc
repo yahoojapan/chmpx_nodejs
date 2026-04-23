@@ -199,6 +199,8 @@ void ChmpxNode::Init(Napi::Env env, Napi::Object exports)
 	//
 }
 
+// cppcheck-suppress unmatchedSuppression
+// cppcheck-suppress functionStatic
 Napi::Value ChmpxNode::New(const Napi::CallbackInfo& info)
 {
 	if(info.IsConstructCall()){

@@ -845,12 +845,11 @@ run_pre_test()
 {
 	if [ -n "${IS_TEST_CJS}" ] && [ "${IS_TEST_CJS}" -eq 1 ]; then
 		# [NOTE]
-		# When running tests in NodeJS 20(and some OSes) with TypeScript, Mocha
-		# will throw the error ERR_REQUIRE_CYCLE_MODULE.
-		# Currently, there is no workaround, so you will need to convert the test
-		# scripts to CommonJS beforehand and run them as CommonJS.
-		# Note that TypeScript tests are run in other NodeJS versions, so there
-		# is no problem.
+		# Depending on the NodeJS version, running tests with
+		# TypeScript will cause Mocha to throw an ERR_REQUIRE_CYCLE_MODULE
+		# error. Currently, there is no workaround, so you must
+		# convert your test scripts to CommonJS beforehand and
+		# run them as CommonJS. In this case, set IS_TEST_CJS=1.
 		#
 		if ! /bin/sh -c "npm run build:ts:tests:cjs"; then
 			PRNERR "Failed to run \"npm run build:ts:tests:cjs\"."
@@ -1572,6 +1571,20 @@ if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${UPDATE_CMD}" "${INSTALL_AUTO_AR
 	exit 1
 fi
 
+# [NOTE]
+# For Fedora:44, /etc/pki/tls/certs/ca-bundle.crt does not exist.
+# To create it, you need to run "update-ca-trust extract --rhbz2387674".
+#
+if [ "${IS_OS_FEDORA}" -eq 1 ]; then
+	if [ ! -f /etc/pki/tls/certs/ca-bundle.crt ]; then
+		PRNINFO "Create ca-bundle.crt file for fedora OS"
+		if ({ RUNCMD update-ca-trust extract --rhbz2387674 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNERR "Failed to create ca-bundle.crt"
+			exit 1
+		fi
+	fi
+fi
+
 #
 # Check and install curl
 #
@@ -1769,44 +1782,20 @@ if [ "${RUN_CPPCHECK}" -eq 1 ]; then
 		fi
 
 	elif [ "${IS_OS_ROCKY}" -eq 1 ]; then
-		if echo "${CI_OSTYPE}" | sed -e 's#:##g' | grep -q -i 'rockylinux8'; then
+		#
+		# Rocky (need epel repository)
+		#
+		if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" epel-release || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNERR "Failed to install epel repository"
+			exit 1
+		fi
+
+		if echo "${CI_OSTYPE}" | sed -e 's#:##g' | grep -q -i 'rockylinux[:]*8'; then
 			#
-			# Rocky 8
+			# Rocky 8 (need to powertools )
 			#
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to install epel repository"
-				exit 1
-			fi
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" config-manager --enable epel || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to enable epel repository"
-				exit 1
-			fi
 			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" config-manager --set-enabled powertools || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
 				PRNERR "Failed to enable powertools"
-				exit 1
-			fi
-		elif echo "${CI_OSTYPE}" | sed -e 's#:##g' | grep -q -i 'rockylinux9'; then
-			#
-			# Rocky 9
-			#
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to install epel repository"
-				exit 1
-			fi
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" config-manager --enable epel || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to enable epel repository"
-				exit 1
-			fi
-		else
-			#
-			# Rocky 10 or later
-			#
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to install epel repository"
-				exit 1
-			fi
-			if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" config-manager --enable epel || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-				PRNERR "Failed to enable epel repository"
 				exit 1
 			fi
 		fi
@@ -1861,21 +1850,16 @@ if [ "${RUN_SHELLCHECK}" -eq 1 ]; then
 
 	elif [ "${IS_OS_ROCKY}" -eq 1 ]; then
 		#
-		# Rocky
+		# Rocky (need epel repository)
 		#
-		if ! LATEST_SHELLCHECK_DOWNLOAD_URL=$("${CURLCMD}" -s -S https://api.github.com/repos/koalaman/shellcheck/releases/latest | tr ',' '\n' | grep '"browser_download_url"' | grep 'linux.x86_64' | grep 'tar.xz'| sed -e 's#"browser_download_url"[[:space:]]*:##g' -e 's#{##g' -e 's#}##g' -e 's#\[##g' -e 's#\]##g' -e 's#,##g' -e 's#"##g' -e 's#[[:space:]]##g' | head -1 | tr -d '\n'); then
-			PRNERR "Failed to get shellcheck download url path"
+		if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" epel-release || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNERR "Failed to install epel repository"
 			exit 1
 		fi
-		if ({ RUNCMD "${CURLCMD}" -s -S -L -o /tmp/shellcheck.tar.xz "${LATEST_SHELLCHECK_DOWNLOAD_URL}" || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-			PRNERR "Failed to download latest shellcheck tar.xz"
+		if ({ RUNCMD "${SUDO_CMD}" "${INSTALLER_BIN}" "${INSTALL_CMD}" "${INSTALL_CMD_ARG}" "${INSTALL_AUTO_ARG}" ShellCheck || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
+			PRNERR "Failed to install ShellCheck"
 			exit 1
 		fi
-		if ({ RUNCMD "${SUDO_CMD}" tar -C /usr/bin/ -xf /tmp/shellcheck.tar.xz --no-anchored 'shellcheck' --strip=1 || echo > "${PIPEFAILURE_FILE}"; } | sed -e 's/^/    /g') && rm "${PIPEFAILURE_FILE}" >/dev/null 2>&1; then
-			PRNERR "Failed to extract latest shellcheck binary"
-			exit 1
-		fi
-		rm -f /tmp/shellcheck.tar.xz
 
 	elif [ "${IS_OS_UBUNTU}" -eq 1 ] || [ "${IS_OS_DEBIAN}" -eq 1 ]; then
 		#

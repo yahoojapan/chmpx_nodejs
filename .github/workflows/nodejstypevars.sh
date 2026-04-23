@@ -55,8 +55,16 @@
 #   IS_NPM_PUBLISHER  : Set to 1 when publishing a NPM package.
 #                       Set this value to only one of the target nodejs
 #                       major versions and OS types.
+#
 #   IS_TEST_CJS       : Set to 1 for testing with CommonJS compiled from
 #                       Typescript test codes(mocha. chai)
+#                       [NOTE]
+#                       Depending on the NodeJS version, running tests with
+#                       TypeScript will cause Mocha to throw an ERR_REQUIRE_CYCLE_MODULE
+#                       error. Currently, there is no workaround, so you must
+#                       convert your test scripts to CommonJS beforehand and
+#                       run them as CommonJS. In this case, set IS_TEST_CJS=1.
+#
 #   PUBLISH_DOMAIN    : Publish to NPM domain(default: registry.npmjs.org)
 #
 # Set these variables according to the CI_NODEJS_MAJOR_VERSION variable.
@@ -101,17 +109,6 @@ if [ -z "${CI_NODEJS_MAJOR_VERSION}" ]; then
 	#
 	:
 
-elif [ "${CI_NODEJS_MAJOR_VERSION}" = "20"  ]; then
-	# [NOTE]
-	# When running tests in NodeJS 20 with TypeScript, Mocha will throw the
-	# error ERR_REQUIRE_CYCLE_MODULE.
-	# Currently, there is no workaround, so you will need to convert the test
-	# scripts to CommonJS beforehand and run them as CommonJS.
-	# Note that TypeScript tests are run in other NodeJS versions, so there
-	# is no problem.
-	#
-	IS_TEST_CJS=1
-
 elif [ "${CI_NODEJS_MAJOR_VERSION}" = "22"  ]; then
 	# Nothing to do
 	:
@@ -133,6 +130,19 @@ if [ -z "${CI_OSTYPE}" ]; then
 	# Unknown OS : Nothing to do
 	#
 	:
+
+elif echo "${CI_OSTYPE}" | grep -q -i -e "ubuntu:26.04" -e "ubuntu:resolute"; then
+	INSTALLER_BIN="apt-get"
+	UPDATE_CMD="update"
+	UPDATE_CMD_ARG=""
+	INSTALL_CMD="install"
+	INSTALL_CMD_ARG=""
+	INSTALL_AUTO_ARG="-y"
+	INSTALL_QUIET_ARG="-qq"
+	INSTALL_PKG_LIST="git gcc g++ make procps ca-certificates gnupg libyaml-dev chmpx-dev k2hash-dev libssl-dev"
+	NODEJS_PKG_LIST="nodejs"
+
+	IS_OS_UBUNTU=1
 
 elif echo "${CI_OSTYPE}" | grep -q -i -e "ubuntu:24.04" -e "ubuntu:noble"; then
 	INSTALLER_BIN="apt-get"
@@ -316,7 +326,7 @@ elif echo "${CI_OSTYPE}" | grep -q -i "rockylinux:8"; then
 		echo "[ERROR] Failed to install \"python38\". The script doesn't break here, but fails to prebuild."
 	fi
 
-elif echo "${CI_OSTYPE}" | grep -q -i "fedora:42"; then
+elif echo "${CI_OSTYPE}" | grep -q -i "fedora:44"; then
 	INSTALLER_BIN="dnf"
 	UPDATE_CMD="update"
 	UPDATE_CMD_ARG=""
@@ -329,7 +339,7 @@ elif echo "${CI_OSTYPE}" | grep -q -i "fedora:42"; then
 
 	IS_OS_FEDORA=1
 
-elif echo "${CI_OSTYPE}" | grep -q -i "fedora:41"; then
+elif echo "${CI_OSTYPE}" | grep -q -i "fedora:43"; then
 	INSTALLER_BIN="dnf"
 	UPDATE_CMD="update"
 	UPDATE_CMD_ARG=""
@@ -341,6 +351,23 @@ elif echo "${CI_OSTYPE}" | grep -q -i "fedora:41"; then
 	NODEJS_PKG_LIST="nodejs"
 
 	IS_OS_FEDORA=1
+
+elif echo "${CI_OSTYPE}" | grep -q -i "alpine:3.23"; then
+	INSTALLER_BIN="apk"
+	UPDATE_CMD="update"
+	UPDATE_CMD_ARG="--no-progress"
+	INSTALL_CMD="add"
+	INSTALL_CMD_ARG="--no-progress --no-cache"
+	INSTALL_AUTO_ARG=""
+	INSTALL_QUIET_ARG="-q"
+	INSTALL_PKG_LIST="bash sudo git build-base util-linux-misc musl-locales tar procps yaml-dev chmpx-dev k2hash-dev openssl-dev"
+	NODEJS_PKG_LIST="nodejs npm python3 icu-data-full"
+
+	IS_OS_ALPINE=1
+
+	if [ "${CI_NODEJS_MAJOR_VERSION}" != "24" ]; then
+		NOT_PROVIDED_NODEVER=1
+	fi
 
 elif echo "${CI_OSTYPE}" | grep -q -i "alpine:3.22"; then
 	INSTALLER_BIN="apk"
@@ -391,26 +418,6 @@ elif echo "${CI_OSTYPE}" | grep -q -i "alpine:3.21"; then
 	# Therefore, set IS_TEST_CJS=1 and perform CommonJS testing.
 	#
 	IS_TEST_CJS=1
-
-elif echo "${CI_OSTYPE}" | grep -q -i "alpine:3.20"; then
-	INSTALLER_BIN="apk"
-	UPDATE_CMD="update"
-	UPDATE_CMD_ARG="--no-progress"
-	INSTALL_CMD="add"
-	INSTALL_CMD_ARG="--no-progress --no-cache"
-	INSTALL_AUTO_ARG=""
-	INSTALL_QUIET_ARG="-q"
-	INSTALL_PKG_LIST="bash sudo git build-base util-linux-misc musl-locales tar procps yaml-dev chmpx-dev k2hash-dev openssl-dev"
-	NODEJS_PKG_LIST="nodejs npm python3 icu-data-full"
-
-	IS_OS_ALPINE=1
-
-	if [ "${CI_NODEJS_MAJOR_VERSION}" != "20" ]; then
-		NOT_PROVIDED_NODEVER=1
-	fi
-
-	# Force set flag for CommonJS test
-	IS_TEST_CJS=1
 fi
 
 #
@@ -422,7 +429,7 @@ fi
 # Note that if you are uploading binaries to Github.com Asset, the
 # upload will be performed by all CI processes.
 #
-if echo "${CI_OSTYPE}" | grep -q -i -e "ubuntu:24.04" -e "ubuntu:noble" && [ "${CI_NODEJS_MAJOR_VERSION}" = "24" ]; then
+if echo "${CI_OSTYPE}" | grep -q -i -e "ubuntu:26.04" -e "ubuntu:resolute" && [ "${CI_NODEJS_MAJOR_VERSION}" = "24" ]; then
 	IS_NPM_PUBLISHER=1
 else
 	IS_NPM_PUBLISHER=0
