@@ -5,10 +5,9 @@
     "rootDir": "tests",
     "sourceMap": false,
     "types": ["node", "mocha"],
-    "baseUrl": ".",
     "paths": {
-      "chmpx": ["types/index.d.ts"],
-      "chmpx/*": ["types/*"]
+      "chmpx": ["./types/index.d.ts"],
+      "chmpx/*": ["./types/*"]
     }
   },
   "include": [

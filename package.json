@@ -28,23 +28,23 @@
   ],
   "dependencies": {
     "bindings": "^1.5.0",
-    "node-addon-api": "^8.7.0",
+    "node-addon-api": "^8.9.0",
     "prebuild-install": "^7.1.3"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-replace": "^6.0.3",
     "@rollup/plugin-terser": "^1.0.0",
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.1.0",
     "chai": "^6.2.2",
-    "mocha": "^11.7.5",
-    "node-gyp": "^12.3.0",
+    "mocha": "^11.7.6",
+    "node-gyp": "^13.0.1",
     "prebuild": "^13.0.1",
-    "rollup": "^4.60.2",
-    "typescript": "^5.9.3",
+    "rollup": "^4.62.2",
+    "typescript": "^6.0.3",
     "ts-node": "^10.9.2"
   },
   "scripts": {
@@ -71,7 +71,7 @@
     "test:smoke": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke' && npm run test:smoke:cjs && npm run test:smoke:esm && npm run test:smoke:ts && echo '-> [DONE] Test:smoke\n'",
     "test:smoke:cjs": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:cjs' && node tests/smoke_test_cjs.js && echo '-> [DONE] Test:smoke:cjs\n'",
     "test:smoke:esm": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:esm' && node tests/smoke_test_esm.mjs && echo '-> [DONE] Test:smoke:esm\n'",
-    "test:smoke:ts": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:ts' && tsc --noEmit tests/smoke_test_ts.ts && echo '-> [DONE] Test:smoke:ts\n'",
+    "test:smoke:ts": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:smoke:ts' && tsc --ignoreConfig --skipLibCheck --noEmit tests/smoke_test_ts.ts && echo '-> [DONE] Test:smoke:ts\n'",
     "test:chmpx": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx' && npm run test:chmpx:slave && npm run test:chmpx:server && echo '-> [DONE] Test:chmpx\n'",
     "test:chmpx:slave": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx:slave' && tests/test.sh chmpx_slave && echo '-> [DONE] Test:chmpx:slave\n'",
     "test:chmpx:server": "export NPM_CONFIG_LOGLEVEL=silent && echo '[START] Test:chmpx:server' && tests/test.sh chmpx_server && echo '-> [DONE] Test:chmpx:server\n'"

@@ -35,11 +35,17 @@ on:
     tags:
       - '*'
   pull_request:
+
   #
   # CRON event is fire on every sunday(UTC).
   #
   schedule:
     - cron: '0 15 * * 0'
+
+  #
+  # Manually triggering a workflow
+  #
+  workflow_dispatch:
 
 #
 # Npm Trusted Publishing + OIDC
@@ -74,6 +80,7 @@ jobs:
           - rockylinux:8
           - fedora:44
           - fedora:43
+          - alpine:3.24
           - alpine:3.23
           - alpine:3.22
           - alpine:3.21
@@ -139,6 +146,35 @@ jobs:
           echo "ENV_PACKAGECLOUD_OWNER=${{ secrets.PACKAGECLOUD_OWNER }}"                 >> "${GITHUB_ENV}"
           echo "ENV_PACKAGECLOUD_DOWNLOAD_REPO=${{ secrets.PACKAGECLOUD_DOWNLOAD_REPO }}" >> "${GITHUB_ENV}"
           echo "ENV_NPM_TOKEN=${{ secrets.NPM_TOKEN }}"                                   >> "${GITHUB_ENV}"
+
+      #
+      # Set environments from special variables
+      #
+      # This is the only way to control "min-release-age" when running GitHub Actions,
+      # and it is required only for forked repositories or emergency pull requests.
+      #
+      # [Not PRs]
+      # For operations other than PRs, the value of the "FORCE_MIN_RELEASE_AGE" Github
+      # Actions Variable configured in the repository is referenced.
+      # If this variable is not defined, the default value is used as the "min-release-age".
+      #
+      #    FORCE_MIN_RELEASE_AGE      : Specify a value for the min-release-age setting.
+      #                                 However, do not configure this value unless there
+      #                                 is a special circumstance.
+      #
+      # [PRs]
+      # In the case of a PR, only repository owners and members can bypass the 
+      # "min-release-age" setting.
+      # However, this applies only when a specific keyword is included in the PR body.
+      #
+      - name: Control npm minimum release age
+        run: |
+          ASSOC="${{ github.event.pull_request.author_association }}"
+          if [ "${{ github.event_name }}" = "pull_request" ] && { [ "$ASSOC" = "OWNER" ] || [ "$ASSOC" = "MEMBER" ]; } && echo "${{ github.event.pull_request.body }}" | grep -q "/skip-package-age-limit"; then
+            echo "ENV_FORCE_MIN_RELEASE_AGE=0"                                 >> "${GITHUB_ENV}"
+          else
+            echo "ENV_FORCE_MIN_RELEASE_AGE=${{ vars.FORCE_MIN_RELEASE_AGE }}" >> "${GITHUB_ENV}"
+          fi
 
       #
       # Run building and packaging helper

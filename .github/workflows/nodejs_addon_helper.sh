@@ -81,6 +81,8 @@ CI_PUBLISH_TAG_NAME=""
 CI_DO_BINARY_PUBLISH=0
 CI_DO_NPM_PUBLISH=0
 
+CI_FORCE_MIN_RELEASE_AGE=""
+
 PATH_PACKAGE_JSON="${SRCTOP}/package.json"
 
 #
@@ -562,6 +564,7 @@ func_usage()
 	echo "    ENV_USE_PACKAGECLOUD_REPO                 use packagecloud.io repository: true/false                ( same as option '--use-packagecloudio-repo(-usepc)' and '--not-use-packagecloudio-repo(-notpc)' )"
 	echo "    ENV_PACKAGECLOUD_OWNER                    owner name for uploading to packagecloud.io               ( same as option '--packagecloudio-owner(-pcowner)' )"
 	echo "    ENV_PACKAGECLOUD_DOWNLOAD_REPO            repository name of installing packages in packagecloud.io ( same as option '--packagecloudio-download-repo(-pcdlrepo)' )"
+	echo "    ENV_FORCE_MIN_RELEASE_AGE                 a value for the min-release-age setting."
 	echo "    ENV_NPM_TOKEN                             [Deprecated] currently use automation NPM token."
 	echo ""
 	echo "  Note:"
@@ -1343,6 +1346,18 @@ elif [ -n "${ENV_NPM_OIDC_EXCHANGE_URL}" ]; then
 	CI_NPM_OIDC_EXCHANGE_URL="${ENV_NPM_OIDC_EXCHANGE_URL}"
 fi
 
+# [NOTE]
+# ENV_FORCE_MIN_RELEASE_AGE cannot be configured via options,
+# and only numeric values are permitted.
+#
+if [ -n "${ENV_FORCE_MIN_RELEASE_AGE}" ]; then
+	if echo "${ENV_FORCE_MIN_RELEASE_AGE}" | grep -q '[^0-9]'; then
+		PRNWARN "ENV_FORCE_MIN_RELEASE_AGE(=${ENV_FORCE_MIN_RELEASE_AGE}) enviroment value is wrong, so skip tp set it."
+	else
+		CI_FORCE_MIN_RELEASE_AGE="${ENV_FORCE_MIN_RELEASE_AGE}"
+	fi
+fi
+
 #
 # Check running as root user
 #
@@ -1522,6 +1537,7 @@ echo "  CI_FORCE_NOT_PUBLISHER        = ${CI_FORCE_NOT_PUBLISHER}"
 echo "  CI_PUBLISH_TAG_NAME           = ${CI_PUBLISH_TAG_NAME}"
 echo "  CI_DO_BINARY_PUBLISH          = ${CI_DO_BINARY_PUBLISH}"
 echo "  CI_DO_NPM_PUBLISH             = ${CI_DO_NPM_PUBLISH}"
+echo "  CI_FORCE_MIN_RELEASE_AGE      = ${CI_FORCE_MIN_RELEASE_AGE}"
 echo ""
 echo "  INSTALLER_BIN                 = ${INSTALLER_BIN}"
 echo "  UPDATE_CMD                    = ${UPDATE_CMD}"
