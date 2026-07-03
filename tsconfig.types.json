@@ -4,7 +4,6 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "types-generated",
-    "rootDir": "src",
     "skipLibCheck": true
   },
   "include": [
