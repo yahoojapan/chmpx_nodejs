@@ -559,9 +559,9 @@ run_pre_install()
 	# Notably, the default npm version included with Node.js v22 is older than this,
 	# so an upgrade is necessary.
 	#
-	_NPMVER_MAJOR=$(npm -v 2>&1 | awk -F'\.' '{print $1}' 2>&1)
-	_NPMVER_MINOR=$(npm -v 2>&1 | awk -F'\.' '{print $2}' 2>&1)
-	_NPMVER_PATCH=$(npm -v 2>&1 | awk -F'\.' '{print $3}' 2>&1)
+	_NPMVER_MAJOR=$(npm -v 2>&1 | awk -F'.' '{print $1}' 2>&1)
+	_NPMVER_MINOR=$(npm -v 2>&1 | awk -F'.' '{print $2}' 2>&1)
+	_NPMVER_PATCH=$(npm -v 2>&1 | awk -F'.' '{print $3}' 2>&1)
 	_NEED_NPM_UPGRADE=0
 
 	if [ -z "${_NPMVER_MAJOR}" ]; then
